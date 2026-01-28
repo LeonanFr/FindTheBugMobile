@@ -1,0 +1,222 @@
+findthebug-mobile/
+├── app/
+│   ├── src/
+│   │   ├── main/
+│   │   │   ├── java/com/findthebug/
+│   │   │   │   ├── MainActivity.kt
+│   │   │   │   ├── App.kt
+│   │   │   │   │
+│   │   │   │   ├── core/
+│   │   │   │   │   ├── common/
+│   │   │   │   │   │   ├── Constants.kt
+│   │   │   │   │   │   ├── Extensions.kt
+│   │   │   │   │   │   ├── Result.kt
+│   │   │   │   │   │   └── Enums.kt
+│   │   │   │   │   ├── network/
+│   │   │   │   │   │   ├── WebSocketClient.kt
+│   │   │   │   │   │   ├── HttpClient.kt
+│   │   │   │   │   │   ├── ApiResponse.kt
+│   │   │   │   │   │   └── NetworkMonitor.kt
+│   │   │   │   │   ├── theme/
+│   │   │   │   │   │   ├── Colors.kt
+│   │   │   │   │   │   ├── Typography.kt
+│   │   │   │   │   │   ├── Theme.kt
+│   │   │   │   │   │   └── Dimensions.kt
+│   │   │   │   │   ├── util/
+│   │   │   │   │   │   ├── Logger.kt
+│   │   │   │   │   │   ├── TimerUtils.kt
+│   │   │   │   │   │   └── ValidationUtils.kt
+│   │   │   │   │   └── navigation/
+│   │   │   │   │       ├── AppNavigator.kt
+│   │   │   │   │       ├── NavGraph.kt
+│   │   │   │   │       └── Destinations.kt
+│   │   │   │   │
+│   │   │   │   ├── data/
+│   │   │   │   │   ├── local/
+│   │   │   │   │   │   ├── database/
+│   │   │   │   │   │   │   ├── AppDatabase.kt
+│   │   │   │   │   │   │   ├── entities/
+│   │   │   │   │   │   │   │   ├── SessionEntity.kt
+│   │   │   │   │   │   │   │   └── EvidenceEntity.kt
+│   │   │   │   │   │   │   └── dao/
+│   │   │   │   │   │   │       ├── SessionDao.kt
+│   │   │   │   │   │   │       └── EvidenceDao.kt
+│   │   │   │   │   │   └── datastore/
+│   │   │   │   │   │       └── AppPreferences.kt
+│   │   │   │   │   │
+│   │   │   │   │   ├── remote/
+│   │   │   │   │   │   ├── api/
+│   │   │   │   │   │   │   ├── FindTheBugApi.kt
+│   │   │   │   │   │   │   ├── WebSocketService.kt
+│   │   │   │   │   │   │   ├── ApiClient.kt
+│   │   │   │   │   │   │   └── ApiEndpoints.kt
+│   │   │   │   │   │   ├── model/
+│   │   │   │   │   │   │   ├── request/
+│   │   │   │   │   │   │   │   ├── CreateLobbyRequest.kt
+│   │   │   │   │   │   │   │   ├── GameActionRequest.kt
+│   │   │   │   │   │   │   │   ├── JoinLobbyRequest.kt
+│   │   │   │   │   │   │   │   ├── SubmitSolutionRequest.kt
+│   │   │   │   │   │   │   │   └── SaveNoteRequest.kt
+│   │   │   │   │   │   │   ├── response/
+│   │   │   │   │   │   │   │   ├── LobbyCreatedResponse.kt
+│   │   │   │   │   │   │   │   ├── GameStateUpdateResponse.kt
+│   │   │   │   │   │   │   │   ├── CaseResponse.kt
+│   │   │   │   │   │   │   │   ├── ClueRevealedResponse.kt
+│   │   │   │   │   │   │   │   └── SolutionResponse.kt
+│   │   │   │   │   │   │   └── websocket/
+│   │   │   │   │   │   │       ├── WebSocketMessage.kt
+│   │   │   │   │   │   │       └── WebSocketMessageType.kt
+│   │   │   │   │   │   └── source/
+│   │   │   │   │   │       ├── RemoteGameDataSource.kt
+│   │   │   │   │   │       ├── RemoteCaseDataSource.kt
+│   │   │   │   │   │       └── RemoteSessionDataSource.kt
+│   │   │   │   │   │
+│   │   │   │   │   └── repository/
+│   │   │   │   │       ├── GameRepositoryImpl.kt
+│   │   │   │   │       ├── CaseRepositoryImpl.kt
+│   │   │   │   │       ├── SessionRepositoryImpl.kt
+│   │   │   │   │       └── EvidenceRepositoryImpl.kt
+│   │   │   │   │
+│   │   │   │   ├── domain/
+│   │   │   │   │   ├── model/
+│   │   │   │   │   │   ├── BugCase.kt
+│   │   │   │   │   │   ├── GameState.kt
+│   │   │   │   │   │   ├── Player.kt
+│   │   │   │   │   │   ├── Clue.kt
+│   │   │   │   │   │   ├── Evidence.kt
+│   │   │   │   │   │   ├── Session.kt
+│   │   │   │   │   │   ├── Action.kt
+│   │   │   │   │   │   ├── Target.kt
+│   │   │   │   │   │   └── Solution.kt
+│   │   │   │   │   │
+│   │   │   │   │   ├── repository/
+│   │   │   │   │   │   ├── IGameRepository.kt
+│   │   │   │   │   │   ├── ICaseRepository.kt
+│   │   │   │   │   │   ├── ISessionRepository.kt
+│   │   │   │   │   │   └── IEvidenceRepository.kt
+│   │   │   │   │   │
+│   │   │   │   │   └── usecase/
+│   │   │   │   │       ├── game/
+│   │   │   │   │       │   ├── CreateLobbyUseCase.kt
+│   │   │   │   │       │   ├── JoinLobbyUseCase.kt
+│   │   │   │   │       │   ├── ExecuteActionUseCase.kt
+│   │   │   │   │       │   ├── SubmitSolutionUseCase.kt
+│   │   │   │   │       │   ├── SaveNoteUseCase.kt
+│   │   │   │   │       │   ├── StartGameUseCase.kt
+│   │   │   │   │       │   └── GetGameStateUseCase.kt
+│   │   │   │   │       ├── case/
+│   │   │   │   │       │   ├── GetCasesUseCase.kt
+│   │   │   │   │       │   └── GetCaseDetailsUseCase.kt
+│   │   │   │   │       ├── session/
+│   │   │   │   │       │   ├── SaveSessionUseCase.kt
+│   │   │   │   │       │   └── LoadSessionUseCase.kt
+│   │   │   │   │       └── evidence/
+│   │   │   │   │           ├── SaveEvidenceUseCase.kt
+│   │   │   │   │           └── GetEvidencesUseCase.kt
+│   │   │   │   │
+│   │   │   │   ├── presentation/
+│   │   │   │   │   ├── ui/
+│   │   │   │   │   │   ├── theme/
+│   │   │   │   │   │   │   ├── AppTheme.kt
+│   │   │   │   │   │   │   └── Theme.kt
+│   │   │   │   │   │   │
+│   │   │   │   │   │   ├── components/
+│   │   │   │   │   │   │   ├── common/
+│   │   │   │   │   │   │   │   ├── LoadingIndicator.kt
+│   │   │   │   │   │   │   │   ├── ErrorDialog.kt
+│   │   │   │   │   │   │   │   ├── ConfirmationDialog.kt
+│   │   │   │   │   │   │   │   ├── PFBadge.kt
+│   │   │   │   │   │   │   │   ├── DayCounter.kt
+│   │   │   │   │   │   │   │   └── TimerDisplay.kt
+│   │   │   │   │   │   │   ├── game/
+│   │   │   │   │   │   │   │   ├── ArchitectureDiagram.kt
+│   │   │   │   │   │   │   │   ├── ModuleNode.kt
+│   │   │   │   │   │   │   │   ├── FunctionNode.kt
+│   │   │   │   │   │   │   │   ├── ConnectionLine.kt
+│   │   │   │   │   │   │   │   ├── ActionMenu.kt
+│   │   │   │   │   │   │   │   ├── ClueNoteDialog.kt
+│   │   │   │   │   │   │   │   └── EvidenceCard.kt
+│   │   │   │   │   │   │   └── lobby/
+│   │   │   │   │   │   │       ├── PlayerList.kt
+│   │   │   │   │   │   │       ├── SessionCodeDisplay.kt
+│   │   │   │   │   │   │       └── RoleBadge.kt
+│   │   │   │   │   │   │
+│   │   │   │   │   │   ├── screen/
+│   │   │   │   │   │   │   ├── menu/
+│   │   │   │   │   │   │   │   └── MainMenuScreen.kt
+│   │   │   │   │   │   │   ├── lobby/
+│   │   │   │   │   │   │   │   ├── CreateLobbyScreen.kt
+│   │   │   │   │   │   │   │   ├── JoinLobbyScreen.kt
+│   │   │   │   │   │   │   │   ├── LobbyScreen.kt
+│   │   │   │   │   │   │   │   └── RoleSelectionScreen.kt
+│   │   │   │   │   │   │   ├── game/
+│   │   │   │   │   │   │   │   ├── briefing/
+│   │   │   │   │   │   │   │   │   └── BriefingScreen.kt
+│   │   │   │   │   │   │   │   ├── investigation/
+│   │   │   │   │   │   │   │   │   ├── InvestigationScreen.kt
+│   │   │   │   │   │   │   │   │   ├── TargetSelectionScreen.kt
+│   │   │   │   │   │   │   │   │   └── EvidenceScreen.kt
+│   │   │   │   │   │   │   │   ├── submission/
+│   │   │   │   │   │   │   │   │   └── SubmissionScreen.kt
+│   │   │   │   │   │   │   │   └── results/
+│   │   │   │   │   │   │   │       ├── VictoryScreen.kt
+│   │   │   │   │   │   │   │       ├── GameOverScreen.kt
+│   │   │   │   │   │   │   │       └── SolutionReviewScreen.kt
+│   │   │   │   │   │   │   └── cases/
+│   │   │   │   │   │   │       └── CaseSelectionScreen.kt
+│   │   │   │   │   │   │
+│   │   │   │   │   │   └── state/
+│   │   │   │   │   │       ├── GameUiState.kt
+│   │   │   │   │   │       ├── LobbyUiState.kt
+│   │   │   │   │   │       ├── InvestigationUiState.kt
+│   │   │   │   │   │       └── ScreenState.kt
+│   │   │   │   │   │
+│   │   │   │   │   └── viewmodel/
+│   │   │   │   │       ├── MainViewModel.kt
+│   │   │   │   │       ├── LobbyViewModel.kt
+│   │   │   │   │       ├── GameViewModel.kt
+│   │   │   │   │       ├── InvestigationViewModel.kt
+│   │   │   │   │       ├── EvidenceViewModel.kt
+│   │   │   │   │       ├── SubmissionViewModel.kt
+│   │   │   │   │       └── CaseSelectionViewModel.kt
+│   │   │   │   │
+│   │   │   │   └── di/
+│   │   │   │       ├── AppModule.kt
+│   │   │   │       ├── NetworkModule.kt
+│   │   │   │       ├── RepositoryModule.kt
+│   │   │   │       ├── UseCaseModule.kt
+│   │   │   │       ├── ViewModelModule.kt
+│   │   │   │       └── DatabaseModule.kt
+│   │   │   │
+│   │   │   ├── res/
+│   │   │   │   ├── drawable/
+│   │   │   │   │   ├── ic_bug.xml
+│   │   │   │   │   ├── ic_lobby.xml
+│   │   │   │   │   ├── ic_investigate.xml
+│   │   │   │   │   └── ...
+│   │   │   │   ├── layout/
+│   │   │   │   ├── values/
+│   │   │   │   │   ├── colors.xml
+│   │   │   │   │   ├── strings.xml
+│   │   │   │   │   ├── themes.xml
+│   │   │   │   │   └── dimens.xml
+│   │   │   │   └── ...
+│   │   │   └── AndroidManifest.xml
+│   │   │
+│   │   ├── debug/
+│   │   │   └── java/com/findthebug/
+│   │   └── androidTest/
+│   │       └── java/com/findthebug/
+│   │
+│   ├── build.gradle.kts
+│   └── proguard-rules.pro
+│
+├── build.gradle.kts (project level)
+├── settings.gradle.kts
+├── gradle.properties
+├── gradle/
+│   └── wrapper/
+│       ├── gradle-wrapper.jar
+│       └── gradle-wrapper.properties
+├── .gitignore
+└── README.md
