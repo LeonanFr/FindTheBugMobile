@@ -1,7 +1,7 @@
 package com.app.findthebug.di
 
-import com.app.findthebug.domain.usecase.case.GetCaseDetailsUseCase
-import com.app.findthebug.domain.usecase.case.GetCasesUseCase
+import com.app.findthebug.domain.usecase.cases.GetCaseDetailsUseCase
+import com.app.findthebug.domain.usecase.cases.GetCasesUseCase
 import com.app.findthebug.domain.usecase.evidence.GetEvidencesUseCase
 import com.app.findthebug.domain.usecase.evidence.SaveEvidenceUseCase
 import com.app.findthebug.domain.usecase.game.*
