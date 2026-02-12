@@ -6,12 +6,34 @@ import com.app.findthebug.data.remote.model.websocket.WebSocketMessage
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonSyntaxException
-import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.*
-import okhttp3.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.Response
+import okhttp3.WebSocket
+import okhttp3.WebSocketListener
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.math.min
 
 @Singleton
 class WebSocketService @Inject constructor() {
@@ -19,10 +41,14 @@ class WebSocketService @Inject constructor() {
         .registerTypeAdapter(WebSocketMessage::class.java, WebSocketMessage.Adapter())
         .create()
 
-    private var webSocket: WebSocket? = null
-    private var client: OkHttpClient? = null
+    @Volatile private var webSocket: WebSocket? = null
+    @Volatile private var client: OkHttpClient? = null
 
-    private val _messages = MutableSharedFlow<WebSocketMessage>(extraBufferCapacity = 64)
+    private val _messages = MutableSharedFlow<WebSocketMessage>(
+        replay = 1,
+        extraBufferCapacity = 64
+    )
+
     val messages: Flow<WebSocketMessage> = _messages.asSharedFlow()
 
     private val _connectionState = MutableStateFlow<ConnectionState>(ConnectionState.DISCONNECTED)
@@ -37,11 +63,13 @@ class WebSocketService @Inject constructor() {
 
     private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
+    private val pendingJson = ArrayDeque<String>()
+    private val pendingLock = Any()
+    private val reconnectScheduled = AtomicBoolean(false)
+
     fun connect() {
-        if (connectionState.value is ConnectionState.CONNECTED ||
-            connectionState.value is ConnectionState.CONNECTING) {
-            return
-        }
+        val state = connectionState.value
+        if (state is ConnectionState.CONNECTED || state is ConnectionState.CONNECTING) return
 
         _connectionState.value = ConnectionState.CONNECTING
 
@@ -49,9 +77,9 @@ class WebSocketService @Inject constructor() {
             try {
                 val wsClient = OkHttpClient.Builder()
                     .connectTimeout(10, TimeUnit.SECONDS)
-                    .readTimeout(0, TimeUnit.SECONDS) // No timeout for WebSocket
+                    .readTimeout(0, TimeUnit.SECONDS)
                     .writeTimeout(10, TimeUnit.SECONDS)
-                    .pingInterval(30, TimeUnit.SECONDS) // Keep-alive
+                    .pingInterval(30, TimeUnit.SECONDS)
                     .build()
 
                 client = wsClient
@@ -63,15 +91,19 @@ class WebSocketService @Inject constructor() {
                 val listener = createWebSocketListener()
                 webSocket = wsClient.newWebSocket(request, listener)
 
-                withTimeoutOrNull(10000) {
+                val ok = withTimeoutOrNull(10_000) {
                     connectionState.filter { it is ConnectionState.CONNECTED }.first()
-                } ?: run {
+                    true
+                } ?: false
+
+                if (!ok) {
                     _connectionState.value = ConnectionState.ERROR("Connection timeout")
-                    disconnect()
+                    cleanup()
                 }
             } catch (e: Exception) {
                 _connectionState.value = ConnectionState.ERROR("Connection failed: ${e.message}")
                 Log.e("WebSocketService", "Connection error", e)
+                scheduleReconnect()
             }
         }
     }
@@ -80,7 +112,9 @@ class WebSocketService @Inject constructor() {
         return object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 Log.d("WebSocketService", "WebSocket connected")
+                this@WebSocketService.webSocket = webSocket
                 _connectionState.value = ConnectionState.CONNECTED
+                flushPending()
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
@@ -105,50 +139,108 @@ class WebSocketService @Inject constructor() {
                 Log.d("WebSocketService", "Closed: $code - $reason")
                 _connectionState.value = ConnectionState.DISCONNECTED
                 cleanup()
+                scheduleReconnect()
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 Log.e("WebSocketService", "WebSocket failure", t)
                 _connectionState.value = ConnectionState.ERROR("Connection failed: ${t.message}")
+                cleanup()
                 scheduleReconnect()
             }
         }
     }
 
     private fun scheduleReconnect() {
+        if (!reconnectScheduled.compareAndSet(false, true)) return
+
         coroutineScope.launch {
-            delay(Constants.WS_RECONNECT_DELAY)
-            if (connectionState.value !is ConnectionState.CONNECTED) {
-                connect()
+            try {
+                delay(Constants.WS_RECONNECT_DELAY)
+                reconnectScheduled.set(false)
+
+                val state = connectionState.value
+                val hasPending = synchronized(pendingLock) { pendingJson.isNotEmpty() }
+
+                if ((state !is ConnectionState.CONNECTED && state !is ConnectionState.CONNECTING) && hasPending) {
+                    connect()
+                }
+            } catch (_: Exception) {
+                reconnectScheduled.set(false)
             }
         }
     }
 
     fun sendMessage(message: WebSocketMessage): Boolean {
         return try {
-            if (connectionState.value !is ConnectionState.CONNECTED) {
-                Log.w("WebSocketService", "Cannot send message, not connected")
-                return false
-            }
-
             val json = gson.toJson(message)
-            Log.d("WebSocketService", "Sending: $json")
-            val result = webSocket?.send(json) ?: false
 
-            if (!result) {
-                Log.e("WebSocketService", "Failed to send message")
+            val state = connectionState.value
+            val ws = webSocket
+
+            if (state is ConnectionState.CONNECTED && ws != null) {
+                val sent = ws.send(json)
+                if (!sent) {
+                    enqueue(json)
+                    _connectionState.value = ConnectionState.ERROR("Send failed")
+                    scheduleReconnect()
+                }
+                sent
+            } else {
+                enqueue(json)
+                connect()
+                true
             }
-
-            result
         } catch (e: Exception) {
             Log.e("WebSocketService", "Error sending message", e)
             false
         }
     }
 
+    private fun enqueue(json: String) {
+        synchronized(pendingLock) {
+            pendingJson.addLast(json)
+            val max = 256
+            if (pendingJson.size > max) {
+                repeat(pendingJson.size - max) { pendingJson.removeFirst() }
+            }
+        }
+    }
+
+    private fun flushPending() {
+        val ws = webSocket ?: return
+        if (connectionState.value !is ConnectionState.CONNECTED) return
+
+        coroutineScope.launch {
+            val backoffMs = 50L
+            while (true) {
+                val next: String? = synchronized(pendingLock) {
+                    if (pendingJson.isEmpty()) null else pendingJson.removeFirst()
+                }
+
+                if (next == null) break
+
+                val ok = try {
+                    ws.send(next)
+                } catch (_: Exception) {
+                    false
+                }
+
+                if (!ok) {
+                    enqueue(next)
+                    _connectionState.value = ConnectionState.ERROR("Send failed")
+                    scheduleReconnect()
+                    delay(backoffMs)
+                    min(backoffMs * 2, 1000L)
+                    break
+                }
+            }
+        }
+    }
+
     suspend inline fun <reified T : WebSocketMessage> waitForMessage(
         noinline predicate: (T) -> Boolean = { true },
-        timeoutMillis: Long = 10000
+        timeoutMillis: Long = 10_000
     ): T? = withContext(Dispatchers.IO) {
         try {
             withTimeout(timeoutMillis) {
@@ -165,9 +257,11 @@ class WebSocketService @Inject constructor() {
     }
 
     fun disconnect() {
-        webSocket?.close(1000, "Normal closure")
+        try {
+            webSocket?.close(1000, "Normal closure")
+        } catch (_: Exception) {
+        }
         cleanup()
-        coroutineScope.cancel()
         _connectionState.value = ConnectionState.DISCONNECTED
     }
 
