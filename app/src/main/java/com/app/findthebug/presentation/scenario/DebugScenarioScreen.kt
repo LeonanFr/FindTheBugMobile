@@ -1,6 +1,7 @@
 package com.app.findthebug.presentation.scenario
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -15,21 +16,19 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 data class DebugCase(
+    val id: String,
     val title: String,
     val subtitle: String
 )
@@ -37,6 +36,8 @@ data class DebugCase(
 @Composable
 fun DebugScenarioScreen(
     cases: List<DebugCase>,
+    isLoading: Boolean = false,
+    errorMessage: String? = null,
     onBack: () -> Unit = {},
     onInvestigate: (DebugCase) -> Unit = {}
 ) {
@@ -74,11 +75,10 @@ fun DebugScenarioScreen(
                         .size(40.dp * scale)
                         .background(Color(0xFF1C2126), RoundedCornerShape(10.dp))
                 ) {
-                    Icon(
-                        imageVector = Icons.Filled.ArrowBack,
-                        contentDescription = "Voltar",
-                        tint = Color(0xFFE9EEF1),
-                        modifier = Modifier.size(20.dp * scale)
+                    Text(
+                        text = "<",
+                        color = Color(0xFFE9EEF1),
+                        fontSize = 18.sp * scale
                     )
                 }
                 Spacer(modifier = Modifier.width(12.dp * scale))
@@ -92,7 +92,25 @@ fun DebugScenarioScreen(
 
             Spacer(modifier = Modifier.height(20.dp * scale))
 
-            val columns = if (maxWidth >= 720.dp) 2 else 1
+            if (!errorMessage.isNullOrBlank()) {
+                Text(
+                    text = errorMessage,
+                    color = Color(0xFFFF6B6B),
+                    fontSize = 13.sp * scale
+                )
+                Spacer(modifier = Modifier.height(10.dp * scale))
+            }
+
+            if (isLoading) {
+                Text(
+                    text = "Carregando casos...",
+                    color = Color(0xFFE9EEF1),
+                    fontSize = 14.sp * scale
+                )
+                Spacer(modifier = Modifier.height(10.dp * scale))
+            }
+
+            val columns = if (this@BoxWithConstraints.maxWidth >= 720.dp) 2 else 1
             val rows = cases.chunked(columns)
 
             Column(
@@ -147,6 +165,7 @@ private fun DebugCaseCard(
             .width(cardWidth)
             .height(cardHeight)
             .background(cardColor, RoundedCornerShape(12.dp))
+            .clickable(onClick = onInvestigate)
             .padding(16.dp)
     ) {
         Column(

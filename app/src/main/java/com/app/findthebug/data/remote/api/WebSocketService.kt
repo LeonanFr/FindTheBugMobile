@@ -167,7 +167,6 @@ class WebSocketService @Inject constructor() {
     fun disconnect() {
         webSocket?.close(1000, "Normal closure")
         cleanup()
-        coroutineScope.cancel()
         _connectionState.value = ConnectionState.DISCONNECTED
     }
 

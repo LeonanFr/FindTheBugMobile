@@ -3,6 +3,7 @@ package com.app.findthebug.data.repository
 import com.app.findthebug.core.common.Result
 import com.app.findthebug.data.remote.api.ApiClient
 import com.app.findthebug.data.remote.model.response.CaseResponse
+import com.app.findthebug.data.remote.model.response.CaseSummaryResponse
 import com.app.findthebug.domain.model.BugCase
 import com.app.findthebug.domain.repository.ICaseRepository
 import javax.inject.Inject
@@ -16,7 +17,7 @@ class CaseRepositoryImpl @Inject constructor(
             val response = ApiClient.safeApiCall { apiClient.api.getCases() }
             when (response) {
                 is Result.Success -> {
-                    val cases = response.data.map { it.toDomain() }
+                    val cases = response.data.cases.map { it.toDomainSummary() }
                     Result.Success(cases)
                 }
                 is Result.Error -> response
@@ -49,6 +50,20 @@ class CaseRepositoryImpl @Inject constructor(
                 modules = this.systemTopology.modules.map { com.app.findthebug.domain.model.ModuleNode(it.name) },
                 functions = this.systemTopology.functions.map { com.app.findthebug.domain.model.FunctionNode(it.name, it.parentId) },
                 connections = this.systemTopology.connections.map { com.app.findthebug.domain.model.ConnectionNode(it.id, it.from, it.to) }
+            )
+        )
+    }
+
+    private fun CaseSummaryResponse.toDomainSummary(): BugCase {
+        return BugCase(
+            id = this.id,
+            title = this.title,
+            description = this.shortDescription ?: "",
+            shortDescription = this.shortDescription ?: "",
+            systemTopology = com.app.findthebug.domain.model.SystemTopology(
+                modules = emptyList(),
+                functions = emptyList(),
+                connections = emptyList()
             )
         )
     }

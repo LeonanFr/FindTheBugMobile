@@ -2,6 +2,16 @@ package com.app.findthebug.data.remote.model.response
 
 import com.google.gson.annotations.SerializedName
 
+data class CasesListResponse(
+    @SerializedName("cases") val cases: List<CaseSummaryResponse>
+)
+
+data class CaseSummaryResponse(
+    @SerializedName("id") val id: String,
+    @SerializedName("title") val title: String,
+    @SerializedName("shortDescription") val shortDescription: String? = null
+)
+
 data class CaseResponse(
     @SerializedName("id") val id: String,
     @SerializedName("title") val title: String,

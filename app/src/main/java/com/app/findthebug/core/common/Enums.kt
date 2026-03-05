@@ -1,7 +1,7 @@
 package com.app.findthebug.core.common
 
 enum class PlayerRole(val value: Int){
-    PLAYER(0), HOST(1), MASTER(2);
+    PLAYER(0), MASTER(1), HOST(2);
 
     companion object {
         fun fromInt(value: Int) = entries.firstOrNull { it.value == value } ?: PLAYER

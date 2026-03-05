@@ -3,7 +3,7 @@ package com.app.findthebug.core.common
 object Constants {
 
     //URLS
-    const val BASE_URL = "https://findthebug.onrender.com"
+    const val BASE_URL = "https://findthebug.onrender.com/"
     const val WS_URL = "wss://findthebug.onrender.com/ws"
 
     // Game Constants

@@ -37,7 +37,12 @@ object ApiClient {
         return try {
             val response = apiCall()
             if (response.isSuccessful) {
-                Result.Success(response.body()!!)
+                val body = response.body()
+                if (body != null) {
+                    Result.Success(body)
+                } else {
+                    Result.Error("API Error: empty response body")
+                }
             } else {
                 Result.Error("API Error: ${response.code()} - ${response.message()}")
             }

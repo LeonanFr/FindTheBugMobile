@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
@@ -17,10 +16,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -111,8 +106,13 @@ fun PlayLobbyScreen(
 
 @Composable
 fun CreateLobbyScreen(
-    lobbyCode: String,
-    onShare: () -> Unit,
+    playerName: String,
+    onPlayerNameChange: (String) -> Unit,
+    lobbyCode: String?,
+    isLoading: Boolean,
+    errorMessage: String?,
+    onCreateLobby: () -> Unit,
+    onContinue: () -> Unit,
     onBack: () -> Unit
 ) {
     val background = Color(0xFF1F2429)
@@ -130,28 +130,63 @@ fun CreateLobbyScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = "Sala criada",
+                text = if (lobbyCode == null) "Criar sala" else "Sala criada",
                 color = Color(0xFFE9EEF1),
                 fontSize = 26.sp,
                 fontWeight = FontWeight.SemiBold
             )
             Spacer(modifier = Modifier.height(16.dp))
-            Box(
-                modifier = Modifier
-                    .background(Color(0xFF151A1F), RoundedCornerShape(12.dp))
-                    .padding(horizontal = 28.dp, vertical = 18.dp)
-            ) {
+
+            if (lobbyCode == null) {
+                OutlinedTextField(
+                    value = playerName,
+                    onValueChange = onPlayerNameChange,
+                    label = { Text(text = "Seu nome", color = Color(0xFFBFC9D1)) },
+                    singleLine = true,
+                    modifier = Modifier.width(300.dp),
+                    textStyle = TextStyle(color = Color(0xFFE9EEF1))
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .background(Color(0xFF151A1F), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 28.dp, vertical = 18.dp)
+                ) {
+                    Text(
+                        text = lobbyCode,
+                        color = Color(0xFFF2F4F6),
+                        fontSize = 30.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+
+            if (!errorMessage.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = lobbyCode,
-                    color = Color(0xFFF2F4F6),
-                    fontSize = 30.sp,
-                    fontWeight = FontWeight.Bold,
+                    text = errorMessage,
+                    color = Color(0xFFFF6B6B),
+                    fontSize = 13.sp,
                     textAlign = TextAlign.Center
                 )
             }
+
+            if (isLoading) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "Carregando...",
+                    color = Color(0xFFE9EEF1),
+                    fontSize = 14.sp
+                )
+            }
+
             Spacer(modifier = Modifier.height(16.dp))
             Button(
-                onClick = onShare,
+                onClick = {
+                    if (lobbyCode == null) onCreateLobby() else onContinue()
+                },
+                enabled = !isLoading && (if (lobbyCode == null) playerName.isNotBlank() else true),
                 modifier = Modifier
                     .width(230.dp)
                     .height(54.dp),
@@ -161,7 +196,11 @@ fun CreateLobbyScreen(
                     contentColor = Color.White
                 )
             ) {
-                Text(text = "Compartilhar", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                Text(
+                    text = if (lobbyCode == null) "Criar sala" else "Continuar",
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 16.sp
+                )
             }
             Spacer(modifier = Modifier.height(20.dp))
             OutlinedButton(
@@ -181,12 +220,17 @@ fun CreateLobbyScreen(
 
 @Composable
 fun JoinLobbyScreen(
-    onJoin: (String) -> Unit,
+    playerName: String,
+    onPlayerNameChange: (String) -> Unit,
+    lobbyCode: String,
+    onLobbyCodeChange: (String) -> Unit,
+    isLoading: Boolean,
+    errorMessage: String?,
+    onJoin: () -> Unit,
     onBack: () -> Unit
 ) {
     val background = Color(0xFF1F2429)
     val accent = Color(0xFF00B7C3)
-    var code by remember { mutableStateOf("") }
 
     Box(
         modifier = Modifier
@@ -207,17 +251,44 @@ fun JoinLobbyScreen(
             )
             Spacer(modifier = Modifier.height(16.dp))
             OutlinedTextField(
-                value = code,
-                onValueChange = { code = it },
+                value = playerName,
+                onValueChange = onPlayerNameChange,
+                label = { Text(text = "Seu nome", color = Color(0xFFBFC9D1)) },
+                singleLine = true,
+                modifier = Modifier.width(300.dp),
+                textStyle = TextStyle(color = Color(0xFFE9EEF1))
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            OutlinedTextField(
+                value = lobbyCode,
+                onValueChange = onLobbyCodeChange,
                 label = { Text(text = "Codigo da sala", color = Color(0xFFBFC9D1)) },
                 placeholder = { Text(text = "Ex: FTB-9X42", color = Color(0xFF8A97A1)) },
                 singleLine = true,
                 modifier = Modifier.width(300.dp),
                 textStyle = TextStyle(color = Color(0xFFE9EEF1))
             )
+            if (!errorMessage.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = errorMessage,
+                    color = Color(0xFFFF6B6B),
+                    fontSize = 13.sp,
+                    textAlign = TextAlign.Center
+                )
+            }
+            if (isLoading) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "Entrando na sala...",
+                    color = Color(0xFFE9EEF1),
+                    fontSize = 14.sp
+                )
+            }
             Spacer(modifier = Modifier.height(16.dp))
             Button(
-                onClick = { onJoin(code.trim()) },
+                onClick = onJoin,
+                enabled = !isLoading && playerName.isNotBlank() && lobbyCode.isNotBlank(),
                 modifier = Modifier
                     .width(230.dp)
                     .height(54.dp),
