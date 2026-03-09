@@ -22,41 +22,38 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.unit.Dp
+import com.app.findthebug.presentation.components.BackgroundBlobs
 import kotlin.math.min
 
 @Composable
 fun HomeScreen(
-    onPlay: () -> Unit = {},
+    onPlay: () -> Unit,
     onTutorial: () -> Unit = {},
     onSettings: () -> Unit = {}
 ) {
     val background = Color(0xFF1F2429)
     val accent = Color(0xFF00B7C3)
-    val outline = Color(0xFF2E3A42)
     val red = Color(0xFFE02020)
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(background)
-            .padding(horizontal = 24.dp)
     ) {
-        DecorativeBackground(
-            modifier = Modifier.fillMaxSize(),
-            outline = outline
-        )
+        BackgroundBlobs()
 
         Column(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 24.dp),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -103,8 +100,16 @@ fun HomeScreen(
             Spacer(modifier = Modifier.height(20.dp))
 
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                SecondaryButton(label = "Tutorial", onClick = onTutorial)
-                SecondaryButton(label = "Configurações", onClick = onSettings)
+                SecondaryButton(
+                    label = "Tutorial",
+                    onClick = onTutorial,
+                    enabled = false
+                )
+                SecondaryButton(
+                    label = "Configurações",
+                    onClick = onSettings,
+                    enabled = false
+                )
             }
         }
     }
@@ -113,10 +118,12 @@ fun HomeScreen(
 @Composable
 private fun SecondaryButton(
     label: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    enabled: Boolean = true
 ) {
     OutlinedButton(
         onClick = onClick,
+        enabled = enabled,
         modifier = Modifier
             .height(48.dp)
             .width(160.dp),
@@ -124,7 +131,7 @@ private fun SecondaryButton(
         border = BorderStroke(1.dp, Color(0xFF2D3941)),
         colors = ButtonDefaults.outlinedButtonColors(
             containerColor = Color(0xFF1C2126),
-            contentColor = Color(0xFFF2F4F6)
+            contentColor = if (enabled) Color(0xFFF2F4F6) else Color(0xFF5A5F64)
         )
     ) {
         Text(
@@ -133,43 +140,6 @@ private fun SecondaryButton(
             fontWeight = FontWeight.SemiBold,
             textAlign = TextAlign.Center
         )
-    }
-}
-
-@Composable
-private fun DecorativeBackground(
-    modifier: Modifier,
-    outline: Color
-) {
-    Canvas(modifier = modifier) {
-        val stroke = Stroke(width = 2f)
-        val minDim = min(size.width, size.height)
-
-        drawCircle(
-            color = outline.copy(alpha = 0.5f),
-            radius = minDim * 0.28f,
-            center = Offset(x = size.width * 0.12f, y = size.height * 0.32f),
-            style = stroke
-        )
-
-        drawCircle(
-            color = outline.copy(alpha = 0.4f),
-            radius = minDim * 0.12f,
-            center = Offset(x = size.width * 0.88f, y = size.height * 0.78f),
-            style = stroke
-        )
-
-        val diamondSize = minDim * 0.18f
-        val cx = size.width * 0.78f
-        val cy = size.height * 0.48f
-        val path = Path().apply {
-            moveTo(cx, cy - diamondSize / 2f)
-            lineTo(cx + diamondSize / 2f, cy)
-            lineTo(cx, cy + diamondSize / 2f)
-            lineTo(cx - diamondSize / 2f, cy)
-            close()
-        }
-        drawPath(path, color = outline.copy(alpha = 0.35f), style = stroke)
     }
 }
 
