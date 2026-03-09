@@ -8,13 +8,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.app.findthebug.navigation.Screen
-import com.app.findthebug.presentation.case.CaseDetailScreen
+import com.app.findthebug.presentation.cases.CaseDetailScreen
 import com.app.findthebug.presentation.home.HomeScreen
 import com.app.findthebug.presentation.lobby.CreateLobbyScreen
 import com.app.findthebug.presentation.lobby.JoinLobbyScreen
@@ -22,7 +22,6 @@ import com.app.findthebug.presentation.lobby.PlayLobbyScreen
 import com.app.findthebug.presentation.scenario.DebugScenarioScreen
 import com.app.findthebug.presentation.viewmodel.GameViewModel
 import com.app.findthebug.presentation.viewmodel.LobbyViewModel
-import androidx.hilt.navigation.compose.hiltViewModel
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
