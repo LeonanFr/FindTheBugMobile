@@ -1,5 +1,6 @@
 package com.app.findthebug.data.repository
 
+import android.util.Log
 import com.app.findthebug.core.common.Result
 import com.app.findthebug.data.remote.api.WebSocketService
 import com.app.findthebug.data.remote.model.websocket.*
@@ -369,10 +370,15 @@ class GameRepositoryImpl @Inject constructor(
     }
 
     override suspend fun leaveLobby() {
-        val request = WebSocketMessage.LeaveLobbyRequest()
-        webSocketService.sendMessage(request)
-        disconnectWebSocket()
-    }
+        try {
+            if (webSocketService.isConnected()) {
+                val request = WebSocketMessage.LeaveLobbyRequest()
+                webSocketService.sendMessage(request)
+            }
+        } catch (e: Exception) {
+            Log.e("Error", e.message.toString())
+        }
+        }
 
     private fun convertToGameState(response: WebSocketMessage.GameStateUpdateResponse): GameState {
         return GameState(

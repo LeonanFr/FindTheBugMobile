@@ -36,7 +36,7 @@ import com.app.findthebug.presentation.viewmodel.LobbyViewModel
 @Composable
 fun JoinLobbyScreen(
     viewModel: LobbyViewModel,
-    onJoinSuccess: () -> Unit,
+    onJoinSuccess: (String) -> Unit,
     onBack: () -> Unit
 ) {
     val session by viewModel.currentSession.collectAsStateWithLifecycle()
@@ -48,7 +48,7 @@ fun JoinLobbyScreen(
 
     LaunchedEffect(session) {
         if (session != null) {
-            onJoinSuccess()
+            onJoinSuccess(session!!.sessionId)
         }
     }
 

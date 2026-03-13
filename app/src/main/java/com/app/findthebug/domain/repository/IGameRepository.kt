@@ -20,6 +20,7 @@ interface IGameRepository {
     suspend fun saveNote(sessionId: String, playerId: String, clueId: String, content: String): Result<Unit>
     suspend fun validateSolution(sessionId: String, approved: Boolean): Result<Unit>
 
+
     // Real-time Updates
     fun observeGameState(sessionId: String): Flow<GameState?>
     fun observeSession(sessionId: String): Flow<Session?>

@@ -52,6 +52,7 @@ fun DebugScenarioScreen(
 
     val gameIsLoading by gameViewModel.isLoading.collectAsStateWithLifecycle()
     val session by lobbyViewModel.currentSession.collectAsStateWithLifecycle()
+    val currentPlayerName by gameViewModel.currentPlayerName.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
         casesViewModel.loadCases()
@@ -118,7 +119,7 @@ fun DebugScenarioScreen(
                         DebugCaseCard(
                             case = case,
                             onInvestigate = {
-                                if (session?.hostPlayerId == gameViewModel.getCurrentPlayerName()) {
+                                if (session?.hostPlayerId == currentPlayerName) {
                                     gameViewModel.startGame(case.id)
                                 }
                                 onInvestigate(case)

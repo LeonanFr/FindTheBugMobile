@@ -9,4 +9,7 @@ sealed class Screen(val route: String){
     object CaseDetail : Screen("caseDetail/{caseId}"){
         fun passCaseId(caseId: String) = "caseDetail/$caseId"
     }
+    object LobbyRoom : Screen("lobbyRoom/{sessionId}") {
+        fun passSessionId(sessionId: String) = "lobbyRoom/$sessionId"
+    }
 }

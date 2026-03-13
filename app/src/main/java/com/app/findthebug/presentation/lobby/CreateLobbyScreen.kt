@@ -35,7 +35,7 @@ import com.app.findthebug.presentation.viewmodel.LobbyViewModel
 @Composable
 fun CreateLobbyScreen(
     viewModel: LobbyViewModel,
-    onContinue: () -> Unit,
+    onContinue: (String) -> Unit,
     onBack: () -> Unit
 ) {
     val session by viewModel.currentSession.collectAsStateWithLifecycle()
@@ -111,7 +111,7 @@ fun CreateLobbyScreen(
                     if (session == null) {
                         viewModel.createLobby(playerName)
                     } else {
-                        onContinue()
+                        onContinue(session!!.sessionId)
                     }
                 },
                 enabled = !isLoading && (session != null || playerName.isNotBlank()),

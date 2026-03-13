@@ -3,6 +3,7 @@ package com.app.findthebug.presentation.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.app.findthebug.core.common.Result
+import com.app.findthebug.core.datastore.SessionPreferences
 import com.app.findthebug.domain.model.GameState
 import com.app.findthebug.domain.model.Session
 import com.app.findthebug.domain.usecase.game.*
@@ -29,6 +30,7 @@ class GameViewModel @Inject constructor(
     private val getGameStateUseCase: GetGameStateUseCase,
     private val saveSessionUseCase: SaveSessionUseCase,
     private val loadSessionUseCase: LoadSessionUseCase,
+    private val sessionPreferences: SessionPreferences
 ) : ViewModel() {
 
     private val _currentSession = MutableStateFlow<Session?>(null)
@@ -43,7 +45,22 @@ class GameViewModel @Inject constructor(
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
+    private val _currentPlayerName = MutableStateFlow<String?>(null)
+    val currentPlayerName: StateFlow<String?> = _currentPlayerName.asStateFlow()
+
     private var currentSessionId: String? = null
+
+    init {
+        viewModelScope.launch {
+            sessionPreferences.playerName.collect { name ->
+                _currentPlayerName.value = name
+            }
+        }
+    }
+
+    fun setCurrentPlayerName(name: String) {
+        _currentPlayerName.value = name
+    }
 
     fun createLobby(playerName: String) {
         viewModelScope.launch {
@@ -54,12 +71,13 @@ class GameViewModel @Inject constructor(
                 is Result.Success -> {
                     _currentSession.value = result.data
                     currentSessionId = result.data.sessionId
+                    setCurrentPlayerName(playerName)
+                    sessionPreferences.saveSession(result.data.sessionId, playerName)
                     startObservingGameState(result.data.sessionId)
                 }
                 is Result.Error -> _errorMessage.value = result.message
                 else -> {}
             }
-
             _isLoading.value = false
         }
     }
@@ -73,12 +91,13 @@ class GameViewModel @Inject constructor(
                 is Result.Success -> {
                     _currentSession.value = result.data
                     currentSessionId = sessionId
+                    setCurrentPlayerName(playerName)
+                    sessionPreferences.saveSession(sessionId, playerName)
                     startObservingGameState(sessionId)
                 }
                 is Result.Error -> _errorMessage.value = result.message
                 else -> {}
             }
-
             _isLoading.value = false
         }
     }
@@ -92,12 +111,13 @@ class GameViewModel @Inject constructor(
                 is Result.Success -> {
                     _currentSession.value = result.data
                     currentSessionId = sessionId
+                    setCurrentPlayerName(masterName)
+                    sessionPreferences.saveSession(sessionId, masterName)
                     startObservingGameState(sessionId)
                 }
                 is Result.Error -> _errorMessage.value = result.message
                 else -> {}
             }
-
             _isLoading.value = false
         }
     }
@@ -112,31 +132,32 @@ class GameViewModel @Inject constructor(
                 is Result.Error -> _errorMessage.value = result.message
                 else -> {}
             }
-
             _isLoading.value = false
         }
     }
 
     fun startGame(caseId: String = "case_robotics_001") {
         val sessionId = currentSessionId ?: return
-        val playerName = _currentSession.value?.players?.firstOrNull()?.name ?: return
+        val playerName = _currentPlayerName.value ?: return
 
         viewModelScope.launch {
             _isLoading.value = true
             _errorMessage.value = null
 
             when (val result = startGameUseCase(sessionId, playerName, caseId)) {
+                is Result.Success -> {
+                    sessionPreferences.saveSession(sessionId, playerName)
+                }
                 is Result.Error -> _errorMessage.value = result.message
                 else -> {}
             }
-
             _isLoading.value = false
         }
     }
 
     fun executeAction(actionType: Int, targetId: String) {
         val sessionId = currentSessionId ?: return
-        val playerId = _currentSession.value?.players?.firstOrNull()?.name ?: return
+        val playerId = _currentPlayerName.value ?: return
 
         viewModelScope.launch {
             _isLoading.value = true
@@ -147,7 +168,6 @@ class GameViewModel @Inject constructor(
                 is Result.Error -> _errorMessage.value = result.message
                 else -> {}
             }
-
             _isLoading.value = false
         }
     }
@@ -163,14 +183,13 @@ class GameViewModel @Inject constructor(
                 is Result.Error -> _errorMessage.value = result.message
                 else -> {}
             }
-
             _isLoading.value = false
         }
     }
 
     fun saveNote(clueId: String, content: String) {
         val sessionId = currentSessionId ?: return
-        val playerId = _currentSession.value?.players?.firstOrNull()?.name ?: return
+        val playerId = _currentPlayerName.value ?: return
 
         viewModelScope.launch {
             _isLoading.value = true
@@ -180,7 +199,6 @@ class GameViewModel @Inject constructor(
                 is Result.Error -> _errorMessage.value = result.message
                 else -> {}
             }
-
             _isLoading.value = false
         }
     }
@@ -196,7 +214,6 @@ class GameViewModel @Inject constructor(
                 is Result.Error -> _errorMessage.value = result.message
                 else -> {}
             }
-
             _isLoading.value = false
         }
     }
@@ -236,7 +253,6 @@ class GameViewModel @Inject constructor(
                 is Result.Error -> _errorMessage.value = result.message
                 else -> {}
             }
-
             _isLoading.value = false
         }
     }
@@ -250,22 +266,17 @@ class GameViewModel @Inject constructor(
         _currentGameState.value = null
         _errorMessage.value = null
         currentSessionId = null
+        _currentPlayerName.value = null
     }
 
     fun canStartGame(): Boolean {
         return _currentSession.value?.canStart == true
     }
 
-    fun getCurrentPlayerName(): String? {
-        return _currentSession.value?.players?.firstOrNull()?.name
-    }
-
     fun isCurrentPlayerTurn(): Boolean {
-        val currentPlayer = getCurrentPlayerName()
+        val currentPlayer = _currentPlayerName.value
         val currentTurnPlayer = _currentGameState.value?.currentTurnPlayer
-        return currentPlayer != null &&
-                currentTurnPlayer != null &&
-                currentPlayer == currentTurnPlayer
+        return currentPlayer != null && currentPlayer == currentTurnPlayer
     }
 
     fun hasRequiredPlayers(): Boolean {
@@ -273,7 +284,6 @@ class GameViewModel @Inject constructor(
         val hasHost = players.any { it.role == com.app.findthebug.core.common.PlayerRole.HOST }
         val hasMaster = players.any { it.role == com.app.findthebug.core.common.PlayerRole.MASTER }
         val hasRegularPlayer = players.any { it.role == com.app.findthebug.core.common.PlayerRole.PLAYER }
-
         return hasHost && hasMaster && hasRegularPlayer && players.size >= 3
     }
 }
