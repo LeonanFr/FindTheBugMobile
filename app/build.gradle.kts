@@ -55,6 +55,8 @@ dependencies {
     implementation(libs.androidx.navigation.runtime.ktx)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.datastore.preferences)
+    implementation(libs.androidx.navigationevent)
+    implementation(libs.androidx.compose.foundation.layout)
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     implementation(libs.androidx.hilt.navigation.compose)

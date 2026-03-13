@@ -5,14 +5,19 @@ import androidx.lifecycle.viewModelScope
 import com.app.findthebug.core.common.PlayerRole
 import com.app.findthebug.core.common.Result
 import com.app.findthebug.core.datastore.SessionPreferences
+import com.app.findthebug.data.remote.model.websocket.WebSocketMessage
 import com.app.findthebug.domain.model.GameState
 import com.app.findthebug.domain.model.Session
+import com.app.findthebug.domain.repository.IGameRepository
 import com.app.findthebug.domain.usecase.game.*
 import com.app.findthebug.domain.usecase.session.LoadSessionUseCase
 import com.app.findthebug.domain.usecase.session.SaveSessionUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -30,7 +35,8 @@ class GameViewModel @Inject constructor(
     private val getGameStateUseCase: GetGameStateUseCase,
     private val saveSessionUseCase: SaveSessionUseCase,
     private val loadSessionUseCase: LoadSessionUseCase,
-    private val sessionPreferences: SessionPreferences
+    private val sessionPreferences: SessionPreferences,
+    private val gameRepository: IGameRepository
 ) : ViewModel() {
 
     private val _currentSession = MutableStateFlow<Session?>(null)
@@ -48,12 +54,53 @@ class GameViewModel @Inject constructor(
     private val _currentPlayerName = MutableStateFlow<String?>(null)
     val currentPlayerName: StateFlow<String?> = _currentPlayerName.asStateFlow()
 
+    private val _revealedClue = MutableSharedFlow<Pair<String, String>>()
+    val revealedClue: SharedFlow<Pair<String, String>> = _revealedClue.asSharedFlow()
+
+    private val _gameStarted = MutableSharedFlow<String>()
+    val gameStarted: SharedFlow<String> = _gameStarted.asSharedFlow()
+
+    private val _solutionForReview = MutableSharedFlow<WebSocketMessage.SolutionForReviewResponse>()
+    val solutionForReview: SharedFlow<WebSocketMessage.SolutionForReviewResponse> = _solutionForReview.asSharedFlow()
+
+    private val _gameVictory = MutableSharedFlow<Unit>()
+    val gameVictory: SharedFlow<Unit> = _gameVictory.asSharedFlow()
+
+    private val _gameOver = MutableSharedFlow<Unit>()
+    val gameOver: SharedFlow<Unit> = _gameOver.asSharedFlow()
+
+    private val _solutionRejected = MutableSharedFlow<String>()
+    val solutionRejected: SharedFlow<String> = _solutionRejected.asSharedFlow()
+
     private var currentSessionId: String? = null
 
     init {
         viewModelScope.launch {
             sessionPreferences.playerName.collect { name ->
                 _currentPlayerName.value = name
+            }
+            gameRepository.observeMessages().collect { message ->
+                when (message) {
+                    is WebSocketMessage.ClueRevealedResponse -> {
+                        _revealedClue.emit(Pair(message.clueId, message.content))
+                    }
+                    is WebSocketMessage.GameStartedResponse -> {
+                        _gameStarted.emit(message.caseId)
+                    }
+                    is WebSocketMessage.SolutionForReviewResponse -> {
+                        _solutionForReview.emit(message)
+                    }
+                    is WebSocketMessage.GameVictoryResponse -> {
+                        _gameVictory.emit(Unit)
+                    }
+                    is WebSocketMessage.GameOverResponse -> {
+                        _gameOver.emit(Unit)
+                    }
+                    is WebSocketMessage.SolutionRejectedResponse -> {
+                        _solutionRejected.emit(message.message)
+                    }
+                    else -> {}
+                }
             }
         }
     }
@@ -101,7 +148,6 @@ class GameViewModel @Inject constructor(
             _isLoading.value = false
         }
     }
-
 
     fun getLobbyInfo(sessionId: String) {
         viewModelScope.launch {
@@ -174,8 +220,6 @@ class GameViewModel @Inject constructor(
 
         viewModelScope.launch {
             _isLoading.value = true
-            _errorMessage.value = null
-
             when (val result = saveNoteUseCase(sessionId, playerId, clueId, content)) {
                 is Result.Error -> _errorMessage.value = result.message
                 else -> {}
@@ -263,7 +307,7 @@ class GameViewModel @Inject constructor(
     fun hasRequiredPlayers(): Boolean {
         val players = _currentSession.value?.players ?: emptyList()
         val hasMaster = players.any { it.role == PlayerRole.MASTER }
-        val hasPlayers = players.any { it.role == PlayerRole.PLAYER }
-        return hasMaster && hasPlayers && players.size >= 2
+        val playerCount = players.count { it.role == PlayerRole.PLAYER }
+        return hasMaster && playerCount in 1..4
     }
 }

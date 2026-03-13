@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -37,6 +38,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.app.findthebug.R
 import kotlin.math.min
 
@@ -45,21 +48,22 @@ fun HomeScreen(
     onPlay: () -> Unit,
     onResumeSession: (String, String) -> Unit,
     onNewGame: () -> Unit,
-    hasActiveSession: Boolean,
-    onTutorial: () -> Unit = {},
-    onSettings: () -> Unit = {}
+    viewModel: HomeViewModel = hiltViewModel()
 ) {
+    val sessionState by viewModel.sessionState.collectAsStateWithLifecycle()
+    var showResumeDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        viewModel.checkStoredSession()
+    }
+
+    LaunchedEffect(sessionState) {
+        showResumeDialog = sessionState is HomeViewModel.SessionState.ValidSession
+    }
+
     val background = Color(0xFF1F2429)
     val accent = Color(0xFF00B7C3)
     val outline = Color(0xFF2E3A42)
-
-    var showResumeDialog by remember { mutableStateOf(false) }
-
-    LaunchedEffect(hasActiveSession) {
-        if (hasActiveSession) {
-            showResumeDialog = true
-        }
-    }
 
     Box(
         modifier = Modifier
@@ -72,76 +76,86 @@ fun HomeScreen(
             outline = outline
         )
 
-        Column(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
+        if (sessionState is HomeViewModel.SessionState.Loading) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
             ) {
-                Image(
-                    painter = painterResource(id = R.drawable.ic_bug),
-                    contentDescription = "Bug",
-                    modifier = Modifier.size(44.dp)
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = "Find the ",
-                    color = Color(0xFFE9EEF1),
-                    fontSize = 34.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = "Bug",
-                    color = Color(0xFFE02020),
-                    fontSize = 34.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
+                CircularProgressIndicator(color = accent)
             }
-
-            Spacer(modifier = Modifier.height(28.dp))
-
-            Button(
-                onClick = {
-                    showResumeDialog = false
-                    onNewGame()
-                },
-                modifier = Modifier
-                    .width(220.dp)
-                    .height(52.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = accent,
-                    contentColor = Color.White
-                )
+        } else {
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(
-                    text = "Jogar",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.ic_bug),
+                        contentDescription = "Bug",
+                        modifier = Modifier.size(44.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = "Find the ",
+                        color = Color(0xFFE9EEF1),
+                        fontSize = 34.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = "Bug",
+                        color = Color(0xFFE02020),
+                        fontSize = 34.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
 
-            Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(28.dp))
 
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                SecondaryButton(
-                    label = "Tutorial",
-                    onClick = onTutorial,
-                    enabled = false
-                )
-                SecondaryButton(
-                    label = "Configurações",
-                    onClick = onSettings,
-                    enabled = false
-                )
+                Button(
+                    onClick = {
+                        showResumeDialog = false
+                        onNewGame()
+                    },
+                    modifier = Modifier
+                        .width(220.dp)
+                        .height(52.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = accent,
+                        contentColor = Color.White
+                    )
+                ) {
+                    Text(
+                        text = "Jogar",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    SecondaryButton(
+                        label = "Tutorial",
+                        onClick = { },
+                        enabled = false
+                    )
+                    SecondaryButton(
+                        label = "Configurações",
+                        onClick = { },
+                        enabled = false
+                    )
+                }
             }
         }
     }
 
-    if (showResumeDialog) {
+    if (showResumeDialog && sessionState is HomeViewModel.SessionState.ValidSession) {
+        val validSession = sessionState as HomeViewModel.SessionState.ValidSession
         Dialog(onDismissRequest = { }) {
             Box(
                 modifier = Modifier
@@ -169,6 +183,7 @@ fun HomeScreen(
                         Button(
                             onClick = {
                                 showResumeDialog = false
+                                viewModel.clearSession(validSession.sessionId, validSession.playerName)
                                 onPlay()
                             },
                             colors = ButtonDefaults.buttonColors(
@@ -182,7 +197,7 @@ fun HomeScreen(
                         Button(
                             onClick = {
                                 showResumeDialog = false
-                                onResumeSession("", "")
+                                onResumeSession(validSession.sessionId, validSession.playerName)
                             },
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = Color(0xFF00B7C3),

@@ -24,12 +24,11 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -40,17 +39,24 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.app.findthebug.R
 import com.app.findthebug.core.common.ActionType
 import com.app.findthebug.core.common.TargetType
+import com.app.findthebug.domain.model.ConnectionNode
 import com.app.findthebug.domain.model.FunctionNode
 import com.app.findthebug.domain.model.ModuleNode
-import com.app.findthebug.domain.model.ConnectionNode
+import com.app.findthebug.presentation.components.ActionMenu
 import com.app.findthebug.presentation.components.BackButton
+import com.app.findthebug.presentation.components.ClueNoteDialog
+import com.app.findthebug.presentation.components.DayCounter
+import com.app.findthebug.presentation.components.EvidencePanel
+import com.app.findthebug.presentation.components.PFBadge
+import com.app.findthebug.presentation.components.TimerDisplay
 import com.app.findthebug.presentation.viewmodel.CasesViewModel
 import com.app.findthebug.presentation.viewmodel.GameViewModel
+import kotlinx.coroutines.flow.collectLatest
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -67,8 +73,10 @@ fun InvestigationScreen(
     val isLoadingCase by casesViewModel.isLoading.collectAsStateWithLifecycle()
     val errorCase by casesViewModel.errorMessage.collectAsStateWithLifecycle()
     val currentPlayerName by gameViewModel.currentPlayerName.collectAsStateWithLifecycle()
+    val clues = gameState?.discoveredClues ?: emptyList()
 
-    val isMyTurn = gameState?.currentTurnPlayer == currentPlayerName
+    val isMaster = currentPlayerName == session?.masterPlayerId
+    val isMyTurn = gameState?.currentTurnPlayer == currentPlayerName && !isMaster
     val remainingPF = gameState?.remainingPoints ?: 0
     val currentDay = gameState?.currentDay ?: 1
     val maxDays = 5
@@ -80,15 +88,30 @@ fun InvestigationScreen(
         }
     }
 
+    var showNoteDialog by remember { mutableStateOf(false) }
+    var currentClueId by remember { mutableStateOf("") }
+    var currentClueContent by remember { mutableStateOf("") }
+    var noteTimer by remember { mutableIntStateOf(60) }
+
+    LaunchedEffect(Unit) {
+        gameViewModel.revealedClue.collectLatest { (clueId, content) ->
+            if (!isMaster) {
+                currentClueId = clueId
+                currentClueContent = content
+                noteTimer = 60
+                showNoteDialog = true
+            }
+        }
+    }
+
     var selectedTargetId by remember { mutableStateOf<String?>(null) }
     var selectedTargetType by remember { mutableStateOf<TargetType?>(null) }
     var selectedTargetName by remember { mutableStateOf<String?>(null) }
     var showActionMenu by remember { mutableStateOf(false) }
     var expandedModule by remember { mutableStateOf<String?>(null) }
 
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
     fun onTargetSelected(targetId: String, targetType: TargetType, targetName: String) {
+        if (isMaster) return
         selectedTargetId = targetId
         selectedTargetType = targetType
         selectedTargetName = targetName
@@ -127,15 +150,43 @@ fun InvestigationScreen(
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f)
                 )
-                Button(
-                    onClick = onSubmitSolution,
-                    shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFDE1B1B),
-                        contentColor = Color.White
-                    )
-                ) {
-                    Text("Declarar Solução", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                EvidencePanel(
+                    clues = clues,
+                    currentPlayerName = currentPlayerName ?: "",
+                    onNoteClick = { clue ->
+                        if (!isMaster) {
+                            currentClueId = clue.id
+                            currentClueContent = clue.content
+                            noteTimer = 60
+                            showNoteDialog = true
+                        }
+                    }
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                if (isMaster) {
+                    Box(
+                        modifier = Modifier
+                            .background(Color(0xFF2E3A44), RoundedCornerShape(10.dp))
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                    ) {
+                        Text(
+                            text = "Modo Mestre",
+                            color = Color(0xFFB583FF),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                } else {
+                    Button(
+                        onClick = onSubmitSolution,
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFDE1B1B),
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Text("Declarar Solução", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    }
                 }
             }
 
@@ -145,18 +196,8 @@ fun InvestigationScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(18.dp)
             ) {
-                Text(
-                    text = "Pontos de Função: $remainingPF",
-                    color = if (remainingPF > 0) Color(0xFF00B7C3) else Color(0xFFFF6B6B),
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = "Dias Restantes: $daysLeft",
-                    color = if (daysLeft > 0) Color(0xFFE9EEF1) else Color(0xFFFF6B6B),
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium
-                )
+                PFBadge(points = remainingPF)
+                DayCounter(daysLeft = daysLeft)
                 Text(
                     text = "Vez de: ${gameState?.currentTurnPlayer ?: "..."}",
                     color = if (isMyTurn) Color(0xFF8AB4F8) else Color(0xFF9AA5B0),
@@ -191,13 +232,12 @@ fun InvestigationScreen(
                         ModuleItem(
                             module = module,
                             isExpanded = expandedModule == module.name,
-                            onToggleExpand = {
-                                expandedModule = if (expandedModule == module.name) null else module.name
-                            },
+                            onToggleExpand = { expandedModule = if (expandedModule == module.name) null else module.name },
                             functions = caseDetails!!.systemTopology.functions.filter { it.parentId == module.name },
                             onModuleAction = { targetId, targetType, targetName ->
                                 onTargetSelected(targetId, targetType, targetName)
-                            }
+                            },
+                            isMaster = isMaster
                         )
                     }
                     if (caseDetails!!.systemTopology.connections.isNotEmpty()) {
@@ -215,7 +255,8 @@ fun InvestigationScreen(
                                 connection = connection,
                                 onClick = {
                                     onTargetSelected(connection.id, TargetType.CONNECTION, "${connection.from} → ${connection.to}")
-                                }
+                                },
+                                isMaster = isMaster
                             )
                         }
                     }
@@ -224,23 +265,32 @@ fun InvestigationScreen(
         }
     }
 
-    if (showActionMenu && selectedTargetId != null && selectedTargetType != null) {
-        ModalBottomSheet(
-            onDismissRequest = { showActionMenu = false },
-            sheetState = sheetState,
-            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
-            containerColor = Color(0xFF232A30)
-        ) {
-            ActionMenuContent(
-                targetName = selectedTargetName ?: "",
-                targetType = selectedTargetType!!,
-                remainingPF = remainingPF,
-                onActionSelected = { actionType ->
-                    executeAction(actionType)
-                },
-                onDismiss = { showActionMenu = false }
-            )
-        }
+    if (showNoteDialog && !isMaster) {
+        ClueNoteDialog(
+            clueContent = currentClueContent,
+            initialNote = clues.find { it.id == currentClueId }?.playerNotes?.get(currentPlayerName) ?: "",
+            timeLeft = noteTimer,
+            onSave = { note ->
+                gameViewModel.saveNote(currentClueId, note)
+                showNoteDialog = false
+            },
+            onDismiss = { showNoteDialog = false }
+        )
+        TimerDisplay(
+            initialSeconds = noteTimer,
+            isActive = showNoteDialog,
+            onFinish = { showNoteDialog = false }
+        )
+    }
+
+    if (showActionMenu && !isMaster && selectedTargetId != null && selectedTargetType != null) {
+        ActionMenu(
+            targetName = selectedTargetName ?: "",
+            targetType = selectedTargetType!!,
+            remainingPF = remainingPF,
+            onActionSelected = { actionType -> executeAction(actionType) },
+            onDismiss = { showActionMenu = false }
+        )
     }
 }
 
@@ -250,7 +300,8 @@ fun ModuleItem(
     isExpanded: Boolean,
     onToggleExpand: () -> Unit,
     functions: List<FunctionNode>,
-    onModuleAction: (String, TargetType, String) -> Unit
+    onModuleAction: (String, TargetType, String) -> Unit,
+    isMaster: Boolean
 ) {
     Card(
         modifier = Modifier
@@ -264,7 +315,7 @@ fun ModuleItem(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable { onToggleExpand() }
+                .clickable(enabled = !isMaster) { onToggleExpand() }
                 .padding(16.dp)
         ) {
             Row(
@@ -285,16 +336,18 @@ fun ModuleItem(
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f)
                 )
-                IconButton(
-                    onClick = {
-                        onModuleAction(module.name, TargetType.MODULE, module.name)
+                if (!isMaster) {
+                    IconButton(
+                        onClick = { onModuleAction(module.name, TargetType.MODULE, module.name) }
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_action),
+                            contentDescription = "Ações",
+                            tint = Color(0xFF9AA5B0)
+                        )
                     }
-                ) {
-                    Icon(
-                        painter = painterResource(id = R.drawable.ic_action),
-                        contentDescription = "Ações",
-                        tint = Color(0xFF9AA5B0)
-                    )
+                } else {
+                    Spacer(modifier = Modifier.width(48.dp))
                 }
             }
 
@@ -311,7 +364,7 @@ fun ModuleItem(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable {
+                            .clickable(enabled = !isMaster) {
                                 onModuleAction(function.name, TargetType.FUNCTION, function.name)
                             }
                             .padding(start = 36.dp, top = 8.dp, bottom = 8.dp, end = 16.dp)
@@ -329,12 +382,14 @@ fun ModuleItem(
                             fontSize = 16.sp,
                             modifier = Modifier.weight(1f)
                         )
-                        Icon(
-                            painter = painterResource(id = R.drawable.ic_action_small),
-                            contentDescription = "Ações",
-                            tint = Color(0xFF9AA5B0),
-                            modifier = Modifier.size(16.dp)
-                        )
+                        if (!isMaster) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.ic_action_small),
+                                contentDescription = "Ações",
+                                tint = Color(0xFF9AA5B0),
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -345,12 +400,13 @@ fun ModuleItem(
 @Composable
 fun ConnectionItem(
     connection: ConnectionNode,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    isMaster: Boolean
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() }
+            .clickable(enabled = !isMaster) { onClick() }
             .padding(vertical = 4.dp),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
@@ -377,134 +433,14 @@ fun ConnectionItem(
                 fontWeight = FontWeight.Medium,
                 modifier = Modifier.weight(1f)
             )
-            Icon(
-                painter = painterResource(id = R.drawable.ic_action_small),
-                contentDescription = "Ações",
-                tint = Color(0xFF9AA5B0),
-                modifier = Modifier.size(16.dp)
-            )
-        }
-    }
-}
-
-@Composable
-fun ActionMenuContent(
-    targetName: String,
-    targetType: TargetType,
-    remainingPF: Int,
-    onActionSelected: (ActionType) -> Unit,
-    onDismiss: () -> Unit
-) {
-    val actions = when (targetType) {
-        TargetType.MODULE -> listOf(
-            ActionType.READ_DOCUMENTATION,
-            ActionType.INSERT_LOG,
-            ActionType.RUN_UNIT_TESTS,
-            ActionType.RUN_INTEGRATION_TESTS
-        )
-        TargetType.FUNCTION -> listOf(
-            ActionType.READ_DOCUMENTATION,
-            ActionType.INSERT_LOG,
-            ActionType.INVESTIGATE_FUNCTION,
-            ActionType.SET_BREAKPOINT,
-            ActionType.RUN_UNIT_TESTS
-        )
-        TargetType.CONNECTION -> listOf(
-            ActionType.RUN_INTEGRATION_TESTS,
-            ActionType.INSERT_LOG
-        )
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(24.dp)
-    ) {
-        Text(
-            text = targetName,
-            color = Color(0xFFE9EEF1),
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Bold
-        )
-        Text(
-            text = "Selecione uma ação",
-            color = Color(0xFFB0B8C0),
-            fontSize = 14.sp,
-            modifier = Modifier.padding(top = 4.dp, bottom = 16.dp)
-        )
-
-        actions.forEach { action ->
-            val canAfford = remainingPF >= action.cost
-            ActionButton(
-                action = action,
-                enabled = canAfford,
-                onClick = { onActionSelected(action) }
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-        }
-
-        Button(
-            onClick = onDismiss,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(48.dp),
-            shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFF3A4A53),
-                contentColor = Color.White
-            )
-        ) {
-            Text("Cancelar")
-        }
-    }
-}
-
-@Composable
-fun ActionButton(
-    action: ActionType,
-    enabled: Boolean,
-    onClick: () -> Unit
-) {
-    val actionName = when (action) {
-        ActionType.READ_DOCUMENTATION -> "Ler documentação"
-        ActionType.INSERT_LOG -> "Inserir log"
-        ActionType.INVESTIGATE_FUNCTION -> "Investigar função"
-        ActionType.SET_BREAKPOINT -> "Adicionar breakpoint"
-        ActionType.RUN_UNIT_TESTS -> "Executar testes unitários"
-        ActionType.RUN_INTEGRATION_TESTS -> "Executar testes de integração"
-        ActionType.SUBMIT_SOLUTION -> "Submeter solução"
-        ActionType.SKIP_TURN -> "Pular turno"
-    }
-
-    Button(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(56.dp),
-        shape = RoundedCornerShape(12.dp),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = Color(0xFF2E3A44),
-            contentColor = if (enabled) Color.White else Color(0xFF7F8C95),
-            disabledContainerColor = Color(0xFF1F2A30)
-        )
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = actionName,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium
-            )
-            Text(
-                text = "${action.cost} PF",
-                color = if (enabled) Color(0xFF00B7C3) else Color(0xFF5F7A8C),
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold
-            )
+            if (!isMaster) {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_action_small),
+                    contentDescription = "Ações",
+                    tint = Color(0xFF9AA5B0),
+                    modifier = Modifier.size(16.dp)
+                )
+            }
         }
     }
 }

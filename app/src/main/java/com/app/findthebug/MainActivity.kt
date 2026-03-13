@@ -24,10 +24,10 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.app.findthebug.core.common.Result
 import com.app.findthebug.core.datastore.SessionPreferences
-import com.app.findthebug.domain.usecase.session.ValidateSessionUseCase
 import com.app.findthebug.navigation.Screen
 import com.app.findthebug.presentation.cases.CaseDetailScreen
 import com.app.findthebug.presentation.home.HomeScreen
+import com.app.findthebug.presentation.investigation.InvestigationScreen
 import com.app.findthebug.presentation.lobby.CreateLobbyScreen
 import com.app.findthebug.presentation.lobby.JoinLobbyScreen
 import com.app.findthebug.presentation.lobby.LobbyRoomScreen
@@ -36,7 +36,6 @@ import com.app.findthebug.presentation.scenario.DebugScenarioScreen
 import com.app.findthebug.presentation.viewmodel.GameViewModel
 import com.app.findthebug.presentation.viewmodel.LobbyViewModel
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -46,29 +45,10 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var sessionPreferences: SessionPreferences
 
-    @Inject
-    lateinit var validateSessionUseCase: ValidateSessionUseCase
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         WindowCompat.setDecorFitsSystemWindows(window, false)
-
-        lifecycleScope.launch {
-            val sessionId = sessionPreferences.sessionId.first()
-            val playerName = sessionPreferences.playerName.first()
-            val active = sessionPreferences.isSessionActive.first()
-
-            if (active && sessionId != null && playerName != null) {
-                val isValid = when (val result = validateSessionUseCase(sessionId, playerName)) {
-                    is Result.Success -> result.data
-                    else -> false
-                }
-                if (!isValid) {
-                    sessionPreferences.clearSession()
-                }
-            }
-        }
 
         setContent {
             MaterialTheme {
@@ -84,30 +64,47 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     fun AppRoot(navController: NavHostController = rememberNavController()) {
-        val hasActiveSession by sessionPreferences.isSessionActive.collectAsStateWithLifecycle(initialValue = false)
         val savedSessionId by sessionPreferences.sessionId.collectAsStateWithLifecycle(initialValue = null)
         val savedPlayerName by sessionPreferences.playerName.collectAsStateWithLifecycle(initialValue = null)
 
         var isNavigating by remember { mutableStateOf(false) }
 
-        fun startNewGame() {
-            if (isNavigating) return
-            isNavigating = true
-            lifecycleScope.launch {
-                sessionPreferences.clearSession()
-                navController.navigate(Screen.Lobby.route) {
-                    popUpTo(Screen.Home.route) { inclusive = false }
+        val lobbyViewModel: LobbyViewModel = hiltViewModel()
+        val gameViewModel: GameViewModel = hiltViewModel()
+
+
+        LaunchedEffect(Unit) {
+            lobbyViewModel.navigationEvent.collect { event ->
+                when (event) {
+                    is LobbyViewModel.NavigationEvent.GoToHome -> {
+                        navController.popBackStack(Screen.Home.route, inclusive = false)
+                    }
                 }
-                isNavigating = false
             }
         }
 
-        fun resumeSession() {
+        fun startNewGame() {
             if (isNavigating) return
-            if (savedSessionId != null && savedPlayerName != null) {
-                isNavigating = true
-                navController.navigate(Screen.LobbyRoom.passSessionId(savedSessionId!!)) {
-                    popUpTo(Screen.Home.route) { inclusive = false }
+            isNavigating = true
+            navController.navigate(Screen.Lobby.route) {
+                popUpTo(Screen.Home.route) { inclusive = false }
+            }
+            isNavigating = false
+        }
+
+        fun resumeSession(sessionId: String, playerName: String) {
+            if (isNavigating) return
+            isNavigating = true
+            lifecycleScope.launch {
+                when (lobbyViewModel.joinLobby(sessionId, playerName)) {
+                    is Result.Success<*> -> {
+                        navController.navigate(Screen.LobbyRoom.passSessionId(sessionId)) {
+                            popUpTo(Screen.Home.route) { inclusive = false }
+                        }
+                    }
+                    else -> {
+                        sessionPreferences.clearSession()
+                    }
                 }
                 isNavigating = false
             }
@@ -120,9 +117,8 @@ class MainActivity : ComponentActivity() {
             composable(Screen.Home.route) {
                 HomeScreen(
                     onPlay = { startNewGame() },
-                    onResumeSession = { _, _ -> resumeSession() },
-                    onNewGame = { startNewGame() },
-                    hasActiveSession = hasActiveSession
+                    onResumeSession = { sessionId, playerName -> resumeSession(sessionId, playerName) },
+                    onNewGame = { startNewGame() }
                 )
             }
 
@@ -135,9 +131,8 @@ class MainActivity : ComponentActivity() {
             }
 
             composable(Screen.CreateLobby.route) {
-                val viewModel: LobbyViewModel = hiltViewModel()
                 CreateLobbyScreen(
-                    viewModel = viewModel,
+                    viewModel = lobbyViewModel,
                     onContinue = { sessionId ->
                         navController.navigate(Screen.LobbyRoom.passSessionId(sessionId))
                     },
@@ -146,9 +141,8 @@ class MainActivity : ComponentActivity() {
             }
 
             composable(Screen.JoinLobby.route) {
-                val viewModel: LobbyViewModel = hiltViewModel()
                 JoinLobbyScreen(
-                    viewModel = viewModel,
+                    viewModel = lobbyViewModel,
                     onJoinSuccess = { sessionId ->
                         navController.navigate(Screen.LobbyRoom.passSessionId(sessionId))
                     },
@@ -158,43 +152,46 @@ class MainActivity : ComponentActivity() {
 
             composable(Screen.LobbyRoom.route) { backStackEntry ->
                 val sessionId = backStackEntry.arguments?.getString("sessionId") ?: ""
-                val viewModel: LobbyViewModel = hiltViewModel()
-                LaunchedEffect(sessionId) {
-                    viewModel.startObservingSession(sessionId)
-                    viewModel.getLobbyInfo(sessionId)
-                }
                 LobbyRoomScreen(
                     sessionId = sessionId,
-                    viewModel = viewModel,
+                    viewModel = lobbyViewModel,
                     onStartGame = {
                         navController.navigate(Screen.DebugScenario.route)
                     },
-                    onLobbyClosed = {
-                        navController.popBackStack(Screen.Home.route, inclusive = false)
+                    onNavigateHome = {
+                        navController.navigate(Screen.Home.route) {
+                            popUpTo(0) { inclusive = true }
+                            launchSingleTop = true
+                        }
                     }
                 )
             }
 
             composable(Screen.DebugScenario.route) {
-                val gameViewModel: GameViewModel = hiltViewModel()
-                val lobbyViewModel: LobbyViewModel = hiltViewModel()
                 DebugScenarioScreen(
                     gameViewModel = gameViewModel,
                     lobbyViewModel = lobbyViewModel,
-                    onInvestigate = { case ->
-                        navController.navigate(Screen.CaseDetail.passCaseId(case.id))
-                    },
                     onBack = { navController.popBackStack() }
                 )
             }
 
             composable(Screen.CaseDetail.route) { backStackEntry ->
                 val caseId = backStackEntry.arguments?.getString("caseId") ?: ""
-                val gameViewModel: GameViewModel = hiltViewModel()
                 CaseDetailScreen(
                     caseId = caseId,
                     gameViewModel = gameViewModel,
                     onBack = { navController.popBackStack() }
+                )
+            }
+
+            composable(Screen.Investigation.route) { backStackEntry ->
+                val caseId = backStackEntry.arguments?.getString("caseId") ?: ""
+                InvestigationScreen(
+                    caseId = caseId,
+                    gameViewModel = gameViewModel,
+                    onBack = { navController.popBackStack() },
+                    onSubmitSolution = {
+                    }
                 )
             }
         }

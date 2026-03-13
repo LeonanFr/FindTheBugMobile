@@ -5,9 +5,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -22,6 +24,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -42,7 +46,6 @@ data class DebugCase(
 fun DebugScenarioScreen(
     gameViewModel: GameViewModel,
     lobbyViewModel: LobbyViewModel,
-    onInvestigate: (DebugCase) -> Unit,
     onBack: () -> Unit
 ) {
     val casesViewModel: CasesViewModel = hiltViewModel()
@@ -51,11 +54,37 @@ fun DebugScenarioScreen(
     val errorCases by casesViewModel.errorMessage.collectAsStateWithLifecycle()
 
     val gameIsLoading by gameViewModel.isLoading.collectAsStateWithLifecycle()
-    val session by lobbyViewModel.currentSession.collectAsStateWithLifecycle()
+    val lobbyUiState by lobbyViewModel.uiState.collectAsStateWithLifecycle()
     val currentPlayerName by gameViewModel.currentPlayerName.collectAsStateWithLifecycle()
+
+    val isMaster = lobbyUiState.session?.masterPlayerId == currentPlayerName
 
     LaunchedEffect(Unit) {
         casesViewModel.loadCases()
+    }
+
+    @Composable
+    fun Modifier.symmetricSafeDrawing(): Modifier {
+        val density = LocalDensity.current
+        val layoutDirection = LocalLayoutDirection.current
+        val insets = WindowInsets.safeDrawing
+
+        return with(density) {
+            val horizontal = maxOf(
+                insets.getLeft(this, layoutDirection),
+                insets.getRight(this, layoutDirection)
+            ).toDp()
+
+            val vertical = maxOf(
+                insets.getTop(this),
+                insets.getBottom(this)
+            ).toDp()
+
+            this@symmetricSafeDrawing.padding(
+                horizontal = horizontal,
+                vertical = vertical
+            )
+        }
     }
 
     Box(
@@ -66,12 +95,12 @@ fun DebugScenarioScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp)
+                .symmetricSafeDrawing()
         ) {
             BackButton(onClick = onBack)
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Cenário de Debug",
+                text = "Selecionar Caso",
                 color = Color(0xFFE9EEF1),
                 fontSize = 28.sp,
                 fontWeight = FontWeight.SemiBold
@@ -116,15 +145,13 @@ fun DebugScenarioScreen(
                     modifier = Modifier.fillMaxSize()
                 ) {
                     items(cases) { case ->
-                        val isMaster = session?.masterPlayerId == currentPlayerName
-
                         DebugCaseCard(
                             case = case,
+                            isEnabled = isMaster && !gameIsLoading,
                             onInvestigate = {
                                 if (isMaster) {
                                     gameViewModel.startGame(case.id)
                                 }
-                                onInvestigate(case)
                             }
                         )
                     }
@@ -137,6 +164,7 @@ fun DebugScenarioScreen(
 @Composable
 fun DebugCaseCard(
     case: DebugCase,
+    isEnabled: Boolean,
     onInvestigate: () -> Unit
 ) {
     Column(
@@ -159,14 +187,16 @@ fun DebugCaseCard(
         Spacer(modifier = Modifier.height(16.dp))
         Button(
             onClick = onInvestigate,
+            enabled = isEnabled,
             modifier = Modifier.align(Alignment.CenterHorizontally),
             shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = Color(0xFF00B7C3),
-                contentColor = Color.White
+                contentColor = Color.White,
+                disabledContainerColor = Color(0xFF3A4A53)
             )
         ) {
-            Text("Investigar", fontWeight = FontWeight.Bold)
+            Text("Iniciar", fontWeight = FontWeight.Bold)
         }
     }
 }

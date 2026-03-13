@@ -38,9 +38,10 @@ fun CreateLobbyScreen(
     onContinue: (String) -> Unit,
     onBack: () -> Unit
 ) {
-    val session by viewModel.currentSession.collectAsStateWithLifecycle()
-    val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
-    val errorMessage by viewModel.errorMessage.collectAsStateWithLifecycle()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val session = uiState.session
+    val isLoading = uiState.isLoading
+    val errorMessage = uiState.errorMessage
 
     var playerName by remember { mutableStateOf("") }
 
@@ -80,7 +81,7 @@ fun CreateLobbyScreen(
                         .padding(horizontal = 28.dp, vertical = 18.dp)
                 ) {
                     Text(
-                        text = session!!.sessionId,
+                        text = session.sessionId,
                         color = Color(0xFFF2F4F6),
                         fontSize = 30.sp,
                         fontWeight = FontWeight.Bold,
@@ -92,7 +93,7 @@ fun CreateLobbyScreen(
             if (!errorMessage.isNullOrBlank()) {
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = errorMessage!!,
+                    text = errorMessage,
                     color = Color(0xFFFF6B6B),
                     fontSize = 13.sp,
                     textAlign = TextAlign.Center
@@ -111,7 +112,7 @@ fun CreateLobbyScreen(
                     if (session == null) {
                         viewModel.createLobby(playerName)
                     } else {
-                        onContinue(session!!.sessionId)
+                        onContinue(session.sessionId)
                     }
                 },
                 enabled = !isLoading && (session != null || playerName.isNotBlank()),

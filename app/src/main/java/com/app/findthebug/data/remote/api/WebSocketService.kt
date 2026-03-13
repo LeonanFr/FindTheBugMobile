@@ -111,7 +111,6 @@ class WebSocketService @Inject constructor() {
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 Log.e("WebSocketService", "WebSocket failure", t)
                 _connectionState.value = ConnectionState.ERROR("Connection failed: ${t.message}")
-                scheduleReconnect()
             }
         }
     }

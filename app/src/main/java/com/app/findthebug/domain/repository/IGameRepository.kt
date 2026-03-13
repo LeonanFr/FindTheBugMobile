@@ -31,6 +31,6 @@ interface IGameRepository {
     fun isConnected(): Boolean
 
     // Leave
-    suspend fun leaveLobby()
+    suspend fun leaveLobby(sessionId: String, playerName: String)
     suspend fun leaveLobbyBySession(sessionId: String, playerName: String)
 }

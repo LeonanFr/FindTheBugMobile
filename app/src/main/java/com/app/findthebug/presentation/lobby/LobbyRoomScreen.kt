@@ -6,14 +6,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -34,11 +33,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.app.findthebug.core.common.PlayerRole
 import com.app.findthebug.presentation.viewmodel.LobbyViewModel
@@ -46,30 +46,44 @@ import com.app.findthebug.presentation.viewmodel.LobbyViewModel
 @Composable
 fun LobbyRoomScreen(
     sessionId: String,
-    viewModel: LobbyViewModel = hiltViewModel(),
+    viewModel: LobbyViewModel,
     onStartGame: () -> Unit,
-    onLobbyClosed: () -> Unit
+    onNavigateHome: () -> Unit
 ) {
-    val session by viewModel.currentSession.collectAsStateWithLifecycle()
-    val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
-    val errorMessage by viewModel.errorMessage.collectAsStateWithLifecycle()
-    val currentPlayerName by viewModel.currentPlayerName.collectAsStateWithLifecycle()
-    val showExitDialog by viewModel.showExitConfirmation.collectAsStateWithLifecycle()
-    val showLobbyDestroyedDialog by viewModel.showLobbyDestroyedDialog.collectAsStateWithLifecycle()
-    val hasLoadedOnce by viewModel.hasLoadedOnce.collectAsStateWithLifecycle()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    LaunchedEffect(hasLoadedOnce, session) {
-        if (hasLoadedOnce && session == null) {
-            onLobbyClosed()
+    LaunchedEffect(uiState.session) {
+        android.util.Log.d("LobbyRoom", "Players recebidos: ${uiState.session?.players?.map { it.name }}")
+    }
+    LaunchedEffect(Unit) {
+        viewModel.navigationEvent.collect { event ->
+            when (event) {
+                is LobbyViewModel.NavigationEvent.GoToHome -> {
+                    onNavigateHome()
+                }
+            }
         }
     }
 
-    val players = session?.players ?: emptyList()
-    val master = players.find { it.role == PlayerRole.MASTER }
-    val hasAtLeastOnePlayer = players.any { it.role == PlayerRole.PLAYER }
-    val isMaster = currentPlayerName == master?.name
+    if (!uiState.hasLoadedOnce || uiState.session == null) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xFF1F2429)),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularProgressIndicator(color = Color(0xFF00B7C3))
+        }
+        return
+    }
 
-    if (showLobbyDestroyedDialog) {
+    val players = uiState.session!!.players
+    val master = players.find { it.role == PlayerRole.MASTER }
+    val playerCount = players.count { it.role == PlayerRole.PLAYER }
+    val canStartGame = playerCount in 1..4
+    val isMaster = uiState.currentPlayerName == master?.name
+
+    if (uiState.showLobbyDestroyedDialog) {
         Dialog(onDismissRequest = { viewModel.clearLobbyDestroyedDialog() }) {
             Box(
                 modifier = Modifier
@@ -94,7 +108,6 @@ fun LobbyRoomScreen(
                     Button(
                         onClick = {
                             viewModel.clearLobbyDestroyedDialog()
-                            onLobbyClosed()
                         },
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(
@@ -108,19 +121,38 @@ fun LobbyRoomScreen(
             }
         }
     }
+    @Composable
+    fun Modifier.symmetricSafeDrawing(): Modifier {
+        val density = LocalDensity.current
+        val layoutDirection = LocalLayoutDirection.current
+        val insets = WindowInsets.safeDrawing
 
+        return with(density) {
+            val horizontal = maxOf(
+                insets.getLeft(this, layoutDirection),
+                insets.getRight(this, layoutDirection)
+            ).toDp()
+
+            val vertical = maxOf(
+                insets.getTop(this),
+                insets.getBottom(this)
+            ).toDp()
+
+            this@symmetricSafeDrawing.padding(
+                horizontal = horizontal,
+                vertical = vertical
+            )
+        }
+    }
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF1F2429))
-            .statusBarsPadding()
-            .navigationBarsPadding()
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 16.dp)
-                .safeDrawingPadding()
+                .symmetricSafeDrawing()
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -141,23 +173,19 @@ fun LobbyRoomScreen(
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f)
                 )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color(0xFF151A1F), RoundedCornerShape(12.dp))
-                    .padding(vertical = 16.dp, horizontal = 20.dp)
-            ) {
-                Text(
-                    text = "Código: $sessionId",
-                    color = Color(0xFFF2F4F6),
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.align(Alignment.Center)
-                )
+                Box(
+                    modifier = Modifier
+                        .background(Color(0xFF151A1F), RoundedCornerShape(12.dp))
+                        .padding(vertical = 8.dp, horizontal = 16.dp)
+                ) {
+                    Text(
+                        text = "Código: $sessionId",
+                        color = Color(0xFFF2F4F6),
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -166,38 +194,41 @@ fun LobbyRoomScreen(
                 text = "Jogadores (${players.size})",
                 color = Color(0xFFB0B8C0),
                 fontSize = 16.sp,
-                fontWeight = FontWeight.Medium
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.padding(bottom = 8.dp)
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
-
             LazyColumn(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(players) { player ->
                     PlayerRow(
                         name = player.name,
                         role = player.role,
-                        isCurrent = player.name == currentPlayerName
+                        isCurrent = player.name == uiState.currentPlayerName
                     )
                 }
             }
 
-            if (!errorMessage.isNullOrBlank()) {
+            if (!uiState.errorMessage.isNullOrBlank()) {
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = errorMessage!!,
+                    text = uiState.errorMessage!!,
                     color = Color(0xFFFF6B6B),
-                    fontSize = 14.sp
+                    fontSize = 14.sp,
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
 
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(16.dp))
 
             if (isMaster) {
                 Button(
                     onClick = onStartGame,
-                    enabled = hasAtLeastOnePlayer && !isLoading,
+                    enabled = canStartGame && !uiState.isLoading,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(56.dp),
@@ -208,14 +239,18 @@ fun LobbyRoomScreen(
                         disabledContainerColor = Color(0xFF3A4A53)
                     )
                 ) {
-                    if (isLoading) {
+                    if (uiState.isLoading) {
                         CircularProgressIndicator(
                             color = Color.White,
                             modifier = Modifier.size(24.dp)
                         )
                     } else {
                         Text(
-                            text = if (hasAtLeastOnePlayer) "Iniciar Jogo" else "Aguardando jogadores...",
+                            text = when {
+                                playerCount == 0 -> "Aguardando jogadores..."
+                                playerCount > 4 -> "Limite de jogadores excedido"
+                                else -> "Iniciar Jogo"
+                            },
                             fontSize = 18.sp,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -239,7 +274,7 @@ fun LobbyRoomScreen(
         }
     }
 
-    if (showExitDialog) {
+    if (uiState.showExitConfirmation) {
         Dialog(onDismissRequest = { viewModel.confirmExit(false) }) {
             Box(
                 modifier = Modifier

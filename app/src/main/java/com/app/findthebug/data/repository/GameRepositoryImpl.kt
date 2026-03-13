@@ -33,7 +33,7 @@ class GameRepositoryImpl @Inject constructor(
     override suspend fun leaveLobbyBySession(sessionId: String, playerName: String) {
         try {
             ensureConnected()
-            val request = WebSocketMessage.LeaveLobbyRequest()
+            val request = WebSocketMessage.LeaveLobbyRequest(sessionId = sessionId, playerName =  playerName)
             webSocketService.sendMessage(request)
         } catch (e: Exception) {
             Log.e("Error", e.message.toString())
@@ -188,16 +188,18 @@ class GameRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun leaveLobby() {
+    override suspend fun leaveLobby(sessionId: String, playerName: String) {
         try {
             if (webSocketService.isConnected()) {
-                val request = WebSocketMessage.LeaveLobbyRequest()
+                val request = WebSocketMessage.LeaveLobbyRequest(
+                    sessionId = sessionId,
+                    playerName = playerName
+                )
                 webSocketService.sendMessage(request)
             }
         } catch (e: Exception) {
-            Log.e("Error", e.message.toString())
+            Log.e("GameRepository", "Error in leaveLobby", e)
         } finally {
-            webSocketService.disconnect()
             currentSession.value = null
             currentGameState.value = null
         }
@@ -215,9 +217,13 @@ class GameRepositoryImpl @Inject constructor(
     override fun observeSession(sessionId: String): Flow<Session?> {
         return webSocketService.messages
             .filter {
-                (it is WebSocketMessage.LobbyUpdateResponse && it.sessionId == sessionId) ||
+                val accept = (it is WebSocketMessage.LobbyUpdateResponse && it.sessionId == sessionId) ||
                         (it is WebSocketMessage.LobbyInfoResponse && it.sessionId == sessionId) ||
                         (it is WebSocketMessage.LobbyDestroyedResponse)
+                if (accept) {
+                    Log.d("WebSocket", "Mensagem de sessão recebida: ${it.type} para $sessionId")
+                }
+                accept
             }
             .map { message ->
                 when (message) {
@@ -225,12 +231,15 @@ class GameRepositoryImpl @Inject constructor(
                         val players = message.players.map { playerDto ->
                             Player(name = playerDto.name, role = com.app.findthebug.core.common.PlayerRole.fromInt(playerDto.role))
                         }
+                        Log.d("GameRepository", "LobbyUpdate -> Session: players=${players.map { it.name }}")
+
                         Session(
                             sessionId = message.sessionId,
                             players = players,
                             masterPlayerId = players.find { it.role == com.app.findthebug.core.common.PlayerRole.MASTER }?.name,
                             canStart = message.canStart
                         ).also { currentSession.value = it }
+
                     }
                     is WebSocketMessage.LobbyInfoResponse -> {
                         if (message.exists && message.players != null) {

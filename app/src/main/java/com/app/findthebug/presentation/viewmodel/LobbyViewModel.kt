@@ -1,5 +1,6 @@
 package com.app.findthebug.presentation.viewmodel
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.app.findthebug.core.common.Result
@@ -11,8 +12,12 @@ import com.app.findthebug.domain.usecase.game.CreateLobbyUseCase
 import com.app.findthebug.domain.usecase.game.GetLobbyInfoUseCase
 import com.app.findthebug.domain.usecase.game.JoinLobbyUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -26,155 +31,188 @@ class LobbyViewModel @Inject constructor(
     private val sessionPreferences: SessionPreferences
 ) : ViewModel() {
 
-    private val _currentSession = MutableStateFlow<Session?>(null)
-    val currentSession: StateFlow<Session?> = _currentSession
+    data class UiState(
+        val session: Session? = null,
+        val currentPlayerName: String? = null,
+        val isLoading: Boolean = false,
+        val errorMessage: String? = null,
+        val showExitConfirmation: Boolean = false,
+        val showLobbyDestroyedDialog: Boolean = false,
+        val hasLoadedOnce: Boolean = false
+    )
 
-    private val _errorMessage = MutableStateFlow<String?>(null)
-    val errorMessage: StateFlow<String?> = _errorMessage
+    private val _uiState = MutableStateFlow(UiState())
+    val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
-    private val _isLoading = MutableStateFlow(false)
-    val isLoading: StateFlow<Boolean> = _isLoading
+    private val _navigationEvent = MutableSharedFlow<NavigationEvent>()
+    val navigationEvent: SharedFlow<NavigationEvent> = _navigationEvent.asSharedFlow()
 
-    private val _currentPlayerName = MutableStateFlow<String?>(null)
-    val currentPlayerName: StateFlow<String?> = _currentPlayerName.asStateFlow()
+    sealed class NavigationEvent {
+        object GoToHome : NavigationEvent()
+    }
 
-    private val _showExitConfirmation = MutableStateFlow(false)
-    val showExitConfirmation: StateFlow<Boolean> = _showExitConfirmation.asStateFlow()
-
-    private val _showLobbyDestroyedDialog = MutableStateFlow(false)
-    val showLobbyDestroyedDialog: StateFlow<Boolean> = _showLobbyDestroyedDialog.asStateFlow()
-
-    private val _hasLoadedOnce = MutableStateFlow(false)
-    val hasLoadedOnce: StateFlow<Boolean> = _hasLoadedOnce.asStateFlow()
+    private var observeJob: Job? = null
+    private var messagesJob: Job? = null
 
     init {
         viewModelScope.launch {
             sessionPreferences.playerName.collect { name ->
-                _currentPlayerName.value = name
+                _uiState.value = _uiState.value.copy(currentPlayerName = name)
             }
         }
         observeLobbyDestroyed()
     }
 
     private fun observeLobbyDestroyed() {
-        viewModelScope.launch {
+        messagesJob?.cancel()
+        messagesJob = viewModelScope.launch {
             gameRepository.observeMessages().collect { message ->
-                if (message is WebSocketMessage.LobbyDestroyedResponse) {
-                    _showLobbyDestroyedDialog.value = true
-                    sessionPreferences.clearSession()
-                    _currentSession.value = null
-                    _currentPlayerName.value = null
+                when (message) {
+                    is WebSocketMessage.LobbyDestroyedResponse -> {
+                        if (_uiState.value.session != null) {
+                            _uiState.value = _uiState.value.copy(
+                                showLobbyDestroyedDialog = true
+                            )
+                        }
+                    }
+                    is WebSocketMessage.ErrorResponse -> {
+                        if (message.message.contains("not found") || message.message.contains("não encontrado")) {
+                            clearLocalSession()
+                        }
+                    }
+                    else -> {}
                 }
             }
         }
-    }
-
-    fun setCurrentPlayerName(name: String) {
-        _currentPlayerName.value = name
     }
 
     fun createLobby(playerName: String) {
         viewModelScope.launch {
-            _isLoading.value = true
-            _errorMessage.value = null
+            _uiState.value = _uiState.value.copy(
+                isLoading = true,
+                errorMessage = null,
+                showLobbyDestroyedDialog = false
+            )
 
             when (val result = createLobbyUseCase(playerName)) {
                 is Result.Success -> {
-                    _currentSession.value = result.data
-                    setCurrentPlayerName(playerName)
-                    sessionPreferences.saveSession(result.data.sessionId, playerName)
-                }
-                is Result.Error -> _errorMessage.value = result.message
-                else -> {}
-            }
-            _isLoading.value = false
-        }
-    }
-
-    fun joinLobby(sessionId: String, playerName: String) {
-        viewModelScope.launch {
-            _isLoading.value = true
-            _errorMessage.value = null
-
-            when (val result = joinLobbyUseCase(sessionId, playerName)) {
-                is Result.Success -> {
-                    _currentSession.value = result.data
-                    setCurrentPlayerName(playerName)
+                    val sessionId = result.data.sessionId
+                    _uiState.value = _uiState.value.copy(
+                        session = result.data,
+                        currentPlayerName = playerName,
+                        isLoading = false,
+                        hasLoadedOnce = true
+                    )
                     sessionPreferences.saveSession(sessionId, playerName)
+                    startObservingSession(sessionId)
                 }
                 is Result.Error -> {
-                    _errorMessage.value = result.message
-                    if (result.message.contains("Nome ja em uso") || result.message.contains("name already in use")) {
-                        _errorMessage.value = "Este nome já está em uso na sala. Escolha outro."
-                    }
+                    _uiState.value = _uiState.value.copy(
+                        errorMessage = result.message,
+                        isLoading = false
+                    )
                 }
-                else -> {}
+                else -> {
+                    _uiState.value = _uiState.value.copy(isLoading = false)
+                }
             }
-            _isLoading.value = false
         }
     }
 
-    fun getLobbyInfo(sessionId: String) {
-        viewModelScope.launch {
-            _isLoading.value = true
-            _errorMessage.value = null
+    suspend fun joinLobby(sessionId: String, playerName: String): Result<Session> {
+        _uiState.value = _uiState.value.copy(
+            isLoading = true,
+            errorMessage = null,
+            showLobbyDestroyedDialog = false
+        )
 
-            when (val result = getLobbyInfoUseCase(sessionId)) {
-                is Result.Success -> {
-                    _currentSession.value = result.data
-                    _hasLoadedOnce.value = true
-                }
-                is Result.Error -> {
-                    _errorMessage.value = result.message
-                    _hasLoadedOnce.value = true
-                    if (result.message.contains("404") || result.message.contains("not found") || result.message.contains("não encontrado")) {
-                        sessionPreferences.clearSession()
-                        _currentSession.value = null
-                        _currentPlayerName.value = null
-                    }
-                }
-                else -> {}
+        startObservingSession(sessionId)
+
+        val result = joinLobbyUseCase(sessionId, playerName)
+
+        when (result) {
+            is Result.Success -> {
+                _uiState.value = _uiState.value.copy(
+                    session = result.data,
+                    currentPlayerName = playerName,
+                    isLoading = false,
+                    hasLoadedOnce = true
+                )
+                sessionPreferences.saveSession(sessionId, playerName)
             }
-            _isLoading.value = false
+            is Result.Error -> {
+                _uiState.value = _uiState.value.copy(
+                    errorMessage = result.message,
+                    isLoading = false
+                )
+                if (result.message.contains("not found") || result.message.contains("não encontrado")) {
+                    clearLocalSession()
+                }
+            }
+            else -> {
+                _uiState.value = _uiState.value.copy(isLoading = false)
+            }
         }
+        return result
     }
 
     fun startObservingSession(sessionId: String) {
-        viewModelScope.launch {
+        observeJob?.cancel()
+        observeJob = viewModelScope.launch {
             gameRepository.observeSession(sessionId).collect { session ->
-                _currentSession.value = session
-                if (session != null) _hasLoadedOnce.value = true
+                Log.d("LobbyViewModel", "Session updated: players=${session?.players?.map { it.name }}")
+
+                if (session != null) {
+                    _uiState.value = _uiState.value.copy(
+                        session = session,
+                        hasLoadedOnce = true
+                    )
+                }
             }
         }
     }
 
     fun leaveLobby() {
         viewModelScope.launch {
-            _isLoading.value = true
-            gameRepository.leaveLobby()
+            _uiState.value = _uiState.value.copy(isLoading = true)
+            val sessionId = _uiState.value.session?.sessionId
+            val playerName = _uiState.value.currentPlayerName
+
+            if (sessionId != null && playerName != null) {
+                gameRepository.leaveLobby(sessionId, playerName)
+            }
+
+            clearLocalSession()
+        }
+    }
+
+    private fun clearLocalSession() {
+        viewModelScope.launch {
+            observeJob?.cancel()
             sessionPreferences.clearSession()
-            _currentSession.value = null
-            _currentPlayerName.value = null
-            _isLoading.value = false
+            _uiState.value = UiState()
+            _navigationEvent.emit(NavigationEvent.GoToHome)
         }
     }
 
     fun confirmExit(confirm: Boolean) {
         if (confirm) {
             leaveLobby()
+        } else {
+            _uiState.value = _uiState.value.copy(showExitConfirmation = false)
         }
-        _showExitConfirmation.value = false
     }
 
     fun showExitDialog() {
-        _showExitConfirmation.value = true
+        _uiState.value = _uiState.value.copy(showExitConfirmation = true)
     }
 
     fun clearError() {
-        _errorMessage.value = null
+        _uiState.value = _uiState.value.copy(errorMessage = null)
     }
 
     fun clearLobbyDestroyedDialog() {
-        _showLobbyDestroyedDialog.value = false
+        _uiState.value = _uiState.value.copy(showLobbyDestroyedDialog = false)
+        clearLocalSession()
     }
 }

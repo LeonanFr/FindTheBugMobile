@@ -20,6 +20,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,6 +33,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.app.findthebug.presentation.components.BackButton
 import com.app.findthebug.presentation.viewmodel.LobbyViewModel
+import kotlinx.coroutines.launch
 
 @Composable
 fun JoinLobbyScreen(
@@ -39,16 +41,15 @@ fun JoinLobbyScreen(
     onJoinSuccess: (String) -> Unit,
     onBack: () -> Unit
 ) {
-    val session by viewModel.currentSession.collectAsStateWithLifecycle()
-    val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
-    val errorMessage by viewModel.errorMessage.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     var playerName by remember { mutableStateOf("") }
     var lobbyCode by remember { mutableStateOf("") }
 
-    LaunchedEffect(session) {
-        if (session != null) {
-            onJoinSuccess(session!!.sessionId)
+    LaunchedEffect(uiState.session) {
+        uiState.session?.let {
+            onJoinSuccess(it.sessionId)
         }
     }
 
@@ -92,17 +93,17 @@ fun JoinLobbyScreen(
                 textStyle = TextStyle(color = Color(0xFFE9EEF1))
             )
 
-            if (!errorMessage.isNullOrBlank()) {
+            if (!uiState.errorMessage.isNullOrBlank()) {
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = errorMessage!!,
+                    text = uiState.errorMessage!!,
                     color = Color(0xFFFF6B6B),
                     fontSize = 13.sp,
                     textAlign = TextAlign.Center
                 )
             }
 
-            if (isLoading) {
+            if (uiState.isLoading) {
                 Spacer(modifier = Modifier.height(12.dp))
                 CircularProgressIndicator(color = Color(0xFF00B7C3))
             }
@@ -111,9 +112,11 @@ fun JoinLobbyScreen(
 
             Button(
                 onClick = {
-                    viewModel.joinLobby(lobbyCode, playerName)
+                    scope.launch {
+                        viewModel.joinLobby(lobbyCode, playerName)
+                    }
                 },
-                enabled = !isLoading && playerName.isNotBlank() && lobbyCode.isNotBlank(),
+                enabled = !uiState.isLoading && playerName.isNotBlank() && lobbyCode.isNotBlank(),
                 modifier = Modifier
                     .width(230.dp)
                     .height(54.dp),

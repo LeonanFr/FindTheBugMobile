@@ -60,7 +60,9 @@ sealed class WebSocketMessage {
     ) : WebSocketMessage()
 
     data class LeaveLobbyRequest(
-        @SerializedName("type") override val type: String = "LEAVE_LOBBY"
+        @SerializedName("type") override val type: String = "LEAVE_LOBBY",
+        @SerializedName("sessionId") val sessionId: String,
+        @SerializedName("playerName") val playerName: String
     ) : WebSocketMessage()
 
     // === RESPONSES ===
