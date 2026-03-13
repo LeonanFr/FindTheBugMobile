@@ -10,7 +10,6 @@ interface IGameRepository {
     // Lobby
     suspend fun createLobby(playerName: String): Result<Session>
     suspend fun joinLobby(sessionId: String, playerName: String): Result<Session>
-    suspend fun joinAsMaster(sessionId: String, masterName: String): Result<Session>
     suspend fun getLobbyInfo(sessionId: String): Result<Session>
     suspend fun startGame(sessionId: String, playerName: String, caseId: String = "case_robotics_001"): Result<Unit>
 
@@ -33,4 +32,5 @@ interface IGameRepository {
 
     // Leave
     suspend fun leaveLobby()
+    suspend fun leaveLobbyBySession(sessionId: String, playerName: String)
 }

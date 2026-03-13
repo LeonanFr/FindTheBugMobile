@@ -22,7 +22,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -32,9 +31,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -42,7 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.app.findthebug.core.common.PlayerRole
 import com.app.findthebug.presentation.viewmodel.LobbyViewModel
@@ -59,6 +55,7 @@ fun LobbyRoomScreen(
     val errorMessage by viewModel.errorMessage.collectAsStateWithLifecycle()
     val currentPlayerName by viewModel.currentPlayerName.collectAsStateWithLifecycle()
     val showExitDialog by viewModel.showExitConfirmation.collectAsStateWithLifecycle()
+    val showLobbyDestroyedDialog by viewModel.showLobbyDestroyedDialog.collectAsStateWithLifecycle()
     val hasLoadedOnce by viewModel.hasLoadedOnce.collectAsStateWithLifecycle()
 
     LaunchedEffect(hasLoadedOnce, session) {
@@ -68,10 +65,49 @@ fun LobbyRoomScreen(
     }
 
     val players = session?.players ?: emptyList()
-    val host = players.find { it.role == PlayerRole.HOST }
     val master = players.find { it.role == PlayerRole.MASTER }
-    val hasMinimumPlayers = players.size >= 3 && host != null && master != null
-    val isHost = currentPlayerName == host?.name
+    val hasAtLeastOnePlayer = players.any { it.role == PlayerRole.PLAYER }
+    val isMaster = currentPlayerName == master?.name
+
+    if (showLobbyDestroyedDialog) {
+        Dialog(onDismissRequest = { viewModel.clearLobbyDestroyedDialog() }) {
+            Box(
+                modifier = Modifier
+                    .background(Color(0xFF232A30), RoundedCornerShape(16.dp))
+                    .padding(24.dp)
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "Lobby encerrado",
+                        color = Color(0xFFE9EEF1),
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "O mestre saiu e o lobby foi encerrado.",
+                        color = Color(0xFFB0B8C0),
+                        fontSize = 16.sp,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Button(
+                        onClick = {
+                            viewModel.clearLobbyDestroyedDialog()
+                            onLobbyClosed()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF00B7C3),
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Text("OK")
+                    }
+                }
+            }
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -83,12 +119,12 @@ fun LobbyRoomScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp, 0.dp)
+                .padding(horizontal = 16.dp)
+                .safeDrawingPadding()
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
-                    .safeDrawingPadding()
             ) {
                 IconButton(onClick = { viewModel.showExitDialog() }) {
                     Icon(
@@ -158,10 +194,10 @@ fun LobbyRoomScreen(
 
             Spacer(modifier = Modifier.weight(1f))
 
-            if (isHost) {
+            if (isMaster) {
                 Button(
                     onClick = onStartGame,
-                    enabled = hasMinimumPlayers && !isLoading,
+                    enabled = hasAtLeastOnePlayer && !isLoading,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(56.dp),
@@ -179,7 +215,7 @@ fun LobbyRoomScreen(
                         )
                     } else {
                         Text(
-                            text = if (hasMinimumPlayers) "Iniciar Jogo" else "Aguardando jogadores...",
+                            text = if (hasAtLeastOnePlayer) "Iniciar Jogo" else "Aguardando jogadores...",
                             fontSize = 18.sp,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -194,7 +230,7 @@ fun LobbyRoomScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "Aguardando o Host iniciar...",
+                        text = "Aguardando o Mestre iniciar...",
                         color = Color(0xFFA0AAB3),
                         fontSize = 16.sp
                     )
@@ -223,6 +259,15 @@ fun LobbyRoomScreen(
                         color = Color(0xFFB0B8C0),
                         fontSize = 16.sp
                     )
+                    if (isMaster) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Ao sair, o lobby será encerrado para todos.",
+                            color = Color(0xFFFF6B6B),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
                     Spacer(modifier = Modifier.height(24.dp))
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -240,7 +285,7 @@ fun LobbyRoomScreen(
                         Button(
                             onClick = { viewModel.confirmExit(true) },
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFFFF6B6B),
+                                containerColor = if (isMaster) Color(0xFFFF6B6B) else Color(0xFF00B7C3),
                                 contentColor = Color.White
                             ),
                             modifier = Modifier.weight(1f)
@@ -257,8 +302,7 @@ fun LobbyRoomScreen(
 @Composable
 fun PlayerRow(name: String, role: PlayerRole, isCurrent: Boolean) {
     val (icon, tint) = when (role) {
-        PlayerRole.HOST -> Icons.Default.Star to Color(0xFFFFD966)
-        PlayerRole.MASTER -> Icons.Default.Verified to Color(0xFFB583FF)
+        PlayerRole.MASTER -> Icons.Default.Star to Color(0xFFFFD966)
         else -> Icons.Default.Person to Color(0xFF8AB4F8)
     }
 
@@ -296,7 +340,6 @@ fun PlayerRow(name: String, role: PlayerRole, isCurrent: Boolean) {
         Spacer(modifier = Modifier.weight(1f))
         Text(
             text = when (role) {
-                PlayerRole.HOST -> "Host"
                 PlayerRole.MASTER -> "Mestre"
                 else -> "Jogador"
             },

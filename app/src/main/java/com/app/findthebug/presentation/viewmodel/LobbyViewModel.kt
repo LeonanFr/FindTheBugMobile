@@ -4,11 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.app.findthebug.core.common.Result
 import com.app.findthebug.core.datastore.SessionPreferences
+import com.app.findthebug.data.remote.model.websocket.WebSocketMessage
 import com.app.findthebug.domain.model.Session
 import com.app.findthebug.domain.repository.IGameRepository
 import com.app.findthebug.domain.usecase.game.CreateLobbyUseCase
 import com.app.findthebug.domain.usecase.game.GetLobbyInfoUseCase
-import com.app.findthebug.domain.usecase.game.JoinAsMasterUseCase
 import com.app.findthebug.domain.usecase.game.JoinLobbyUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,7 +21,6 @@ import javax.inject.Inject
 class LobbyViewModel @Inject constructor(
     private val createLobbyUseCase: CreateLobbyUseCase,
     private val joinLobbyUseCase: JoinLobbyUseCase,
-    private val joinAsMasterUseCase: JoinAsMasterUseCase,
     private val getLobbyInfoUseCase: GetLobbyInfoUseCase,
     private val gameRepository: IGameRepository,
     private val sessionPreferences: SessionPreferences
@@ -42,6 +41,9 @@ class LobbyViewModel @Inject constructor(
     private val _showExitConfirmation = MutableStateFlow(false)
     val showExitConfirmation: StateFlow<Boolean> = _showExitConfirmation.asStateFlow()
 
+    private val _showLobbyDestroyedDialog = MutableStateFlow(false)
+    val showLobbyDestroyedDialog: StateFlow<Boolean> = _showLobbyDestroyedDialog.asStateFlow()
+
     private val _hasLoadedOnce = MutableStateFlow(false)
     val hasLoadedOnce: StateFlow<Boolean> = _hasLoadedOnce.asStateFlow()
 
@@ -49,6 +51,20 @@ class LobbyViewModel @Inject constructor(
         viewModelScope.launch {
             sessionPreferences.playerName.collect { name ->
                 _currentPlayerName.value = name
+            }
+        }
+        observeLobbyDestroyed()
+    }
+
+    private fun observeLobbyDestroyed() {
+        viewModelScope.launch {
+            gameRepository.observeMessages().collect { message ->
+                if (message is WebSocketMessage.LobbyDestroyedResponse) {
+                    _showLobbyDestroyedDialog.value = true
+                    sessionPreferences.clearSession()
+                    _currentSession.value = null
+                    _currentPlayerName.value = null
+                }
             }
         }
     }
@@ -86,25 +102,12 @@ class LobbyViewModel @Inject constructor(
                     setCurrentPlayerName(playerName)
                     sessionPreferences.saveSession(sessionId, playerName)
                 }
-                is Result.Error -> _errorMessage.value = result.message
-                else -> {}
-            }
-            _isLoading.value = false
-        }
-    }
-
-    fun joinAsMaster(sessionId: String, masterName: String) {
-        viewModelScope.launch {
-            _isLoading.value = true
-            _errorMessage.value = null
-
-            when (val result = joinAsMasterUseCase(sessionId, masterName)) {
-                is Result.Success -> {
-                    _currentSession.value = result.data
-                    setCurrentPlayerName(masterName)
-                    sessionPreferences.saveSession(sessionId, masterName)
+                is Result.Error -> {
+                    _errorMessage.value = result.message
+                    if (result.message.contains("Nome ja em uso") || result.message.contains("name already in use")) {
+                        _errorMessage.value = "Este nome já está em uso na sala. Escolha outro."
+                    }
                 }
-                is Result.Error -> _errorMessage.value = result.message
                 else -> {}
             }
             _isLoading.value = false
@@ -169,5 +172,9 @@ class LobbyViewModel @Inject constructor(
 
     fun clearError() {
         _errorMessage.value = null
+    }
+
+    fun clearLobbyDestroyedDialog() {
+        _showLobbyDestroyedDialog.value = false
     }
 }

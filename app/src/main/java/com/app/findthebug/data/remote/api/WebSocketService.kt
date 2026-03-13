@@ -2,6 +2,7 @@ package com.app.findthebug.data.remote.api
 
 import android.util.Log
 import com.app.findthebug.core.common.Constants
+import com.app.findthebug.core.common.Result
 import com.app.findthebug.data.remote.model.websocket.WebSocketMessage
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
@@ -49,9 +50,9 @@ class WebSocketService @Inject constructor() {
             try {
                 val wsClient = OkHttpClient.Builder()
                     .connectTimeout(10, TimeUnit.SECONDS)
-                    .readTimeout(0, TimeUnit.SECONDS) // No timeout for WebSocket
+                    .readTimeout(0, TimeUnit.SECONDS)
                     .writeTimeout(10, TimeUnit.SECONDS)
-                    .pingInterval(30, TimeUnit.SECONDS) // Keep-alive
+                    .pingInterval(30, TimeUnit.SECONDS)
                     .build()
 
                 client = wsClient
@@ -143,6 +144,33 @@ class WebSocketService @Inject constructor() {
         } catch (e: Exception) {
             Log.e("WebSocketService", "Error sending message", e)
             false
+        }
+    }
+
+    suspend inline fun <reified T : WebSocketMessage> sendMessageAndWaitForResponse(
+        request: WebSocketMessage,
+        timeoutMillis: Long = 10000
+    ): Result<T> = withContext(Dispatchers.IO) {
+        if (!sendMessage(request)) {
+            return@withContext Result.Error("Failed to send message")
+        }
+
+        try {
+            withTimeout(timeoutMillis) {
+                messages.filter { message ->
+                    message is T || message is WebSocketMessage.ErrorResponse
+                }.first().let { message ->
+                    when (message) {
+                        is T -> Result.Success(message)
+                        is WebSocketMessage.ErrorResponse -> Result.Error(message.message)
+                        else -> Result.Error("Unexpected message type")
+                    }
+                }
+            }
+        } catch (e: TimeoutCancellationException) {
+            Result.Error("Timeout waiting for response")
+        } catch (e: Exception) {
+            Result.Error("Error: ${e.message}")
         }
     }
 

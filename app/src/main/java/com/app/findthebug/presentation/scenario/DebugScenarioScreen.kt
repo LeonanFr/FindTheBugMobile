@@ -116,10 +116,12 @@ fun DebugScenarioScreen(
                     modifier = Modifier.fillMaxSize()
                 ) {
                     items(cases) { case ->
+                        val isMaster = session?.masterPlayerId == currentPlayerName
+
                         DebugCaseCard(
                             case = case,
                             onInvestigate = {
-                                if (session?.hostPlayerId == currentPlayerName) {
+                                if (isMaster) {
                                     gameViewModel.startGame(case.id)
                                 }
                                 onInvestigate(case)

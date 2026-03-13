@@ -19,12 +19,6 @@ sealed class WebSocketMessage {
         @SerializedName("playerName") val playerName: String
     ) : WebSocketMessage()
 
-    data class JoinAsMasterRequest(
-        @SerializedName("type") override val type: String = "JOIN_AS_MASTER",
-        @SerializedName("sessionId") val sessionId: String,
-        @SerializedName("masterName") val masterName: String
-    ) : WebSocketMessage()
-
     data class GetLobbyInfoRequest(
         @SerializedName("type") override val type: String = "GET_LOBBY_INFO",
         @SerializedName("sessionId") val sessionId: String
@@ -99,6 +93,11 @@ sealed class WebSocketMessage {
         @SerializedName("players") val players: List<PlayerDto>
     ) : WebSocketMessage()
 
+    data class LobbyDestroyedResponse(
+        @SerializedName("type") override val type: String,
+        @SerializedName("reason") val reason: String
+    ) : WebSocketMessage()
+
     data class GameStartedResponse(
         @SerializedName("type") override val type: String,
         @SerializedName("sessionId") val sessionId: String,
@@ -170,6 +169,7 @@ sealed class WebSocketMessage {
                 "JOINED_LOBBY" -> context.deserialize(jsonObject, JoinedLobbyResponse::class.java)
                 "LOBBY_INFO" -> context.deserialize(jsonObject, LobbyInfoResponse::class.java)
                 "LOBBY_UPDATE" -> context.deserialize(jsonObject, LobbyUpdateResponse::class.java)
+                "LOBBY_DESTROYED" -> context.deserialize(jsonObject, LobbyDestroyedResponse::class.java)
                 "GAME_STARTED" -> context.deserialize(jsonObject, GameStartedResponse::class.java)
                 "GAME_STATE_UPDATE" -> context.deserialize(jsonObject, GameStateUpdateResponse::class.java)
                 "CLUE_REVEALED" -> context.deserialize(jsonObject, ClueRevealedResponse::class.java)
@@ -180,10 +180,8 @@ sealed class WebSocketMessage {
                 "TURN_SKIPPED" -> context.deserialize(jsonObject, TurnSkippedResponse::class.java)
                 "ERROR" -> context.deserialize(jsonObject, ErrorResponse::class.java)
 
-                // Requests (se vierem do servidor, o que é raro, mas para completude)
                 "CREATE_LOBBY" -> context.deserialize(jsonObject, CreateLobbyRequest::class.java)
                 "JOIN_AS_PLAYER" -> context.deserialize(jsonObject, JoinAsPlayerRequest::class.java)
-                "JOIN_AS_MASTER" -> context.deserialize(jsonObject, JoinAsMasterRequest::class.java)
                 "GET_LOBBY_INFO" -> context.deserialize(jsonObject, GetLobbyInfoRequest::class.java)
                 "START_GAME" -> context.deserialize(jsonObject, StartGameRequest::class.java)
                 "GAME_ACTION" -> context.deserialize(jsonObject, GameActionRequest::class.java)

@@ -30,9 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -46,6 +44,7 @@ import kotlin.math.min
 fun HomeScreen(
     onPlay: () -> Unit,
     onResumeSession: (String, String) -> Unit,
+    onNewGame: () -> Unit,
     hasActiveSession: Boolean,
     onTutorial: () -> Unit = {},
     onSettings: () -> Unit = {}
@@ -105,7 +104,10 @@ fun HomeScreen(
             Spacer(modifier = Modifier.height(28.dp))
 
             Button(
-                onClick = onPlay,
+                onClick = {
+                    showResumeDialog = false
+                    onNewGame()
+                },
                 modifier = Modifier
                     .width(220.dp)
                     .height(52.dp),
@@ -140,7 +142,7 @@ fun HomeScreen(
     }
 
     if (showResumeDialog) {
-        Dialog(onDismissRequest = { showResumeDialog = false }) {
+        Dialog(onDismissRequest = { }) {
             Box(
                 modifier = Modifier
                     .background(Color(0xFF232A30), RoundedCornerShape(16.dp))

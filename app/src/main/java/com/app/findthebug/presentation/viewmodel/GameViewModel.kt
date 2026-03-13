@@ -2,6 +2,7 @@ package com.app.findthebug.presentation.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.app.findthebug.core.common.PlayerRole
 import com.app.findthebug.core.common.Result
 import com.app.findthebug.core.datastore.SessionPreferences
 import com.app.findthebug.domain.model.GameState
@@ -20,7 +21,6 @@ import javax.inject.Inject
 class GameViewModel @Inject constructor(
     private val createLobbyUseCase: CreateLobbyUseCase,
     private val joinLobbyUseCase: JoinLobbyUseCase,
-    private val joinAsMasterUseCase: JoinAsMasterUseCase,
     private val getLobbyInfoUseCase: GetLobbyInfoUseCase,
     private val startGameUseCase: StartGameUseCase,
     private val executeActionUseCase: ExecuteActionUseCase,
@@ -102,25 +102,6 @@ class GameViewModel @Inject constructor(
         }
     }
 
-    fun joinAsMaster(sessionId: String, masterName: String) {
-        viewModelScope.launch {
-            _isLoading.value = true
-            _errorMessage.value = null
-
-            when (val result = joinAsMasterUseCase(sessionId, masterName)) {
-                is Result.Success -> {
-                    _currentSession.value = result.data
-                    currentSessionId = sessionId
-                    setCurrentPlayerName(masterName)
-                    sessionPreferences.saveSession(sessionId, masterName)
-                    startObservingGameState(sessionId)
-                }
-                is Result.Error -> _errorMessage.value = result.message
-                else -> {}
-            }
-            _isLoading.value = false
-        }
-    }
 
     fun getLobbyInfo(sessionId: String) {
         viewModelScope.launch {
@@ -281,9 +262,8 @@ class GameViewModel @Inject constructor(
 
     fun hasRequiredPlayers(): Boolean {
         val players = _currentSession.value?.players ?: emptyList()
-        val hasHost = players.any { it.role == com.app.findthebug.core.common.PlayerRole.HOST }
-        val hasMaster = players.any { it.role == com.app.findthebug.core.common.PlayerRole.MASTER }
-        val hasRegularPlayer = players.any { it.role == com.app.findthebug.core.common.PlayerRole.PLAYER }
-        return hasHost && hasMaster && hasRegularPlayer && players.size >= 3
+        val hasMaster = players.any { it.role == PlayerRole.MASTER }
+        val hasPlayers = players.any { it.role == PlayerRole.PLAYER }
+        return hasMaster && hasPlayers && players.size >= 2
     }
 }

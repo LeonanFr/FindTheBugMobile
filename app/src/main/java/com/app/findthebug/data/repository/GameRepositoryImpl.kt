@@ -30,36 +30,34 @@ class GameRepositoryImpl @Inject constructor(
         return false
     }
 
+    override suspend fun leaveLobbyBySession(sessionId: String, playerName: String) {
+        try {
+            ensureConnected()
+            val request = WebSocketMessage.LeaveLobbyRequest()
+            webSocketService.sendMessage(request)
+        } catch (e: Exception) {
+            Log.e("Error", e.message.toString())
+        }
+    }
     override suspend fun createLobby(playerName: String): Result<Session> {
         return try {
-            if (!ensureConnected()) {
-                return Result.Error("WebSocket not connected")
+            if (!ensureConnected()) return Result.Error("WebSocket not connected")
+            val request = WebSocketMessage.CreateLobbyRequest(playerName = playerName)
+            when (val result = webSocketService.sendMessageAndWaitForResponse<WebSocketMessage.LobbyCreatedResponse>(request)) {
+                is Result.Success -> {
+                    val response = result.data
+                    val player = Player(name = response.playerName, role = com.app.findthebug.core.common.PlayerRole.fromInt(response.role))
+                    val session = Session(
+                        sessionId = response.sessionId,
+                        players = listOf(player),
+                        masterPlayerId = if (player.role == com.app.findthebug.core.common.PlayerRole.MASTER) player.name else null
+                    )
+                    currentSession.value = session
+                    Result.Success(session)
+                }
+                is Result.Error -> result
+                else -> Result.Error("Unexpected result type")
             }
-            val request = WebSocketMessage.CreateLobbyRequest(
-                playerName = playerName
-            )
-            if (!webSocketService.sendMessage(request)) {
-                return Result.Error("Failed to send create lobby request")
-            }
-
-            val response = webSocketService.waitForMessage<WebSocketMessage.LobbyCreatedResponse>(
-                predicate = { it.playerName == playerName },
-                timeoutMillis = 10000
-            )
-
-            response?.let {
-                val player = Player(
-                    name = it.playerName,
-                    role = com.app.findthebug.core.common.PlayerRole.fromInt(it.role)
-                )
-                val session = Session(
-                    sessionId = it.sessionId,
-                    players = listOf(player),
-                    hostPlayerId = if (player.role == com.app.findthebug.core.common.PlayerRole.HOST) player.name else null
-                )
-                currentSession.value = session
-                Result.Success(session)
-            } ?: Result.Error("No response received for lobby creation")
         } catch (e: Exception) {
             Result.Error("Create lobby failed: ${e.message}", e)
         }
@@ -67,117 +65,54 @@ class GameRepositoryImpl @Inject constructor(
 
     override suspend fun joinLobby(sessionId: String, playerName: String): Result<Session> {
         return try {
-            if (!ensureConnected()) {
-                return Result.Error("WebSocket not connected")
+            if (!ensureConnected()) return Result.Error("WebSocket not connected")
+            val request = WebSocketMessage.JoinAsPlayerRequest(sessionId = sessionId, playerName = playerName)
+            when (val result = webSocketService.sendMessageAndWaitForResponse<WebSocketMessage.JoinedLobbyResponse>(request)) {
+                is Result.Success -> {
+                    val response = result.data
+                    val resolvedRole = com.app.findthebug.core.common.PlayerRole.fromInt(response.role ?: com.app.findthebug.core.common.PlayerRole.PLAYER.value)
+                    val selfPlayer = Player(name = playerName, role = resolvedRole)
+                    val session = Session(
+                        sessionId = response.sessionId,
+                        players = listOf(selfPlayer),
+                        masterPlayerId = if (resolvedRole == com.app.findthebug.core.common.PlayerRole.MASTER) playerName else null
+                    )
+                    currentSession.value = session
+                    Result.Success(session)
+                }
+                is Result.Error -> result
+                else -> Result.Error("Unexpected result type")
             }
-            val request = WebSocketMessage.JoinAsPlayerRequest(
-                sessionId = sessionId,
-                playerName = playerName
-            )
-            if (!webSocketService.sendMessage(request)) {
-                return Result.Error("Failed to send join lobby request")
-            }
-
-            val response = webSocketService.waitForMessage<WebSocketMessage.JoinedLobbyResponse>(
-                predicate = { it.sessionId == sessionId && it.playerName == playerName },
-                timeoutMillis = 10000
-            )
-
-            response?.let {
-                val resolvedRole = com.app.findthebug.core.common.PlayerRole.fromInt(
-                    it.role ?: com.app.findthebug.core.common.PlayerRole.PLAYER.value
-                )
-                val selfPlayer = Player(
-                    name = playerName,
-                    role = resolvedRole
-                )
-                val session = Session(
-                    sessionId = it.sessionId,
-                    players = listOf(selfPlayer),
-                    hostPlayerId = if (resolvedRole == com.app.findthebug.core.common.PlayerRole.HOST) playerName else null,
-                    masterPlayerId = if (resolvedRole == com.app.findthebug.core.common.PlayerRole.MASTER) playerName else null
-                )
-                currentSession.value = session
-                Result.Success(session)
-            } ?: Result.Error("No response received for joining lobby")
         } catch (e: Exception) {
             Result.Error("Join lobby failed: ${e.message}", e)
         }
     }
 
-    override suspend fun joinAsMaster(sessionId: String, masterName: String): Result<Session> {
-        return try {
-            if (!ensureConnected()) {
-                return Result.Error("WebSocket not connected")
-            }
-            val request = WebSocketMessage.JoinAsMasterRequest(
-                sessionId = sessionId,
-                masterName = masterName
-            )
-            if (!webSocketService.sendMessage(request)) {
-                return Result.Error("Failed to send join as master request")
-            }
-
-            val response = webSocketService.waitForMessage<WebSocketMessage.JoinedLobbyResponse>(
-                predicate = { it.sessionId == sessionId && it.playerName == masterName },
-                timeoutMillis = 10000
-            )
-
-            response?.let {
-                val player = Player(
-                    name = it.playerName,
-                    role = com.app.findthebug.core.common.PlayerRole.MASTER
-                )
-                val session = Session(
-                    sessionId = it.sessionId,
-                    players = listOf(player),
-                    masterPlayerId = player.name
-                )
-                currentSession.value = session
-                Result.Success(session)
-            } ?: Result.Error("No response received for joining as master")
-        } catch (e: Exception) {
-            Result.Error("Join as master failed: ${e.message}", e)
-        }
-    }
-
     override suspend fun getLobbyInfo(sessionId: String): Result<Session> {
         return try {
-            if (!ensureConnected()) {
-                return Result.Error("WebSocket not connected")
-            }
-            val request = WebSocketMessage.GetLobbyInfoRequest(
-                sessionId = sessionId
-            )
-            if (!webSocketService.sendMessage(request)) {
-                return Result.Error("Failed to send lobby info request")
-            }
-
-            val response = webSocketService.waitForMessage<WebSocketMessage.LobbyInfoResponse>(
-                predicate = { it.sessionId == sessionId },
-                timeoutMillis = 5000
-            )
-
-            response?.let {
-                if (it.exists && it.players != null) {
-                    val players = it.players.map { playerDto ->
-                        Player(
-                            name = playerDto.name,
-                            role = com.app.findthebug.core.common.PlayerRole.fromInt(playerDto.role)
+            if (!ensureConnected()) return Result.Error("WebSocket not connected")
+            val request = WebSocketMessage.GetLobbyInfoRequest(sessionId = sessionId)
+            when (val result = webSocketService.sendMessageAndWaitForResponse<WebSocketMessage.LobbyInfoResponse>(request, timeoutMillis = 5000)) {
+                is Result.Success -> {
+                    val response = result.data
+                    if (response.exists && response.players != null) {
+                        val players = response.players.map { playerDto ->
+                            Player(name = playerDto.name, role = com.app.findthebug.core.common.PlayerRole.fromInt(playerDto.role))
+                        }
+                        val session = Session(
+                            sessionId = sessionId,
+                            players = players,
+                            masterPlayerId = players.find { it.role == com.app.findthebug.core.common.PlayerRole.MASTER }?.name
                         )
+                        currentSession.value = session
+                        Result.Success(session)
+                    } else {
+                        Result.Error("Lobby not found")
                     }
-                    val session = Session(
-                        sessionId = sessionId,
-                        players = players,
-                        hostPlayerId = players.find { it.role == com.app.findthebug.core.common.PlayerRole.HOST }?.name,
-                        masterPlayerId = players.find { it.role == com.app.findthebug.core.common.PlayerRole.MASTER }?.name
-                    )
-                    currentSession.value = session
-                    Result.Success(session)
-                } else {
-                    Result.Error("Lobby not found")
                 }
-            } ?: Result.Error("No response received for lobby info")
+                is Result.Error -> result
+                else -> Result.Error("Unexpected result type")
+            }
         } catch (e: Exception) {
             Result.Error("Get lobby info failed: ${e.message}", e)
         }
@@ -185,27 +120,12 @@ class GameRepositoryImpl @Inject constructor(
 
     override suspend fun startGame(sessionId: String, playerName: String, caseId: String): Result<Unit> {
         return try {
-            if (!ensureConnected()) {
-                return Result.Error("WebSocket not connected")
-            }
-            val request = WebSocketMessage.StartGameRequest(
-                sessionId = sessionId,
-                playerName = playerName,
-                caseId = caseId
-            )
-            if (!webSocketService.sendMessage(request)) {
-                return Result.Error("Failed to send start game request")
-            }
-
-            val response = webSocketService.waitForMessage<WebSocketMessage.GameStartedResponse>(
-                predicate = { it.sessionId == sessionId },
-                timeoutMillis = 10000
-            )
-
-            if (response != null) {
-                Result.Success(Unit)
-            } else {
-                Result.Error("No response received for starting game")
+            if (!ensureConnected()) return Result.Error("WebSocket not connected")
+            val request = WebSocketMessage.StartGameRequest(sessionId = sessionId, playerName = playerName, caseId = caseId)
+            when (val result = webSocketService.sendMessageAndWaitForResponse<WebSocketMessage.GameStartedResponse>(request)) {
+                is Result.Success -> Result.Success(Unit)
+                is Result.Error -> result
+                else -> Result.Error("Unexpected result type")
             }
         } catch (e: Exception) {
             Result.Error("Start game failed: ${e.message}", e)
@@ -214,29 +134,22 @@ class GameRepositoryImpl @Inject constructor(
 
     override suspend fun executeAction(sessionId: String, playerId: String, actionType: Int, targetId: String): Result<GameState> {
         return try {
-            if (!ensureConnected()) {
-                return Result.Error("WebSocket not connected")
-            }
+            if (!ensureConnected()) return Result.Error("WebSocket not connected")
             val request = WebSocketMessage.GameActionRequest(
                 sessionId = sessionId,
                 playerId = playerId,
                 actionType = actionType,
                 targetId = targetId
             )
-            if (!webSocketService.sendMessage(request)) {
-                return Result.Error("Failed to send game action request")
+            when (val result = webSocketService.sendMessageAndWaitForResponse<WebSocketMessage.GameStateUpdateResponse>(request)) {
+                is Result.Success -> {
+                    val gameState = convertToGameState(result.data)
+                    currentGameState.value = gameState
+                    Result.Success(gameState)
+                }
+                is Result.Error -> result
+                else -> Result.Error("Unexpected result type")
             }
-
-            val response = webSocketService.waitForMessage<WebSocketMessage.GameStateUpdateResponse>(
-                predicate = { it.sessionId == sessionId },
-                timeoutMillis = 10000
-            )
-
-            response?.let {
-                val gameState = convertToGameState(it)
-                currentGameState.value = gameState
-                Result.Success(gameState)
-            } ?: Result.Error("No response received for game action")
         } catch (e: Exception) {
             Result.Error("Execute action failed: ${e.message}", e)
         }
@@ -244,16 +157,9 @@ class GameRepositoryImpl @Inject constructor(
 
     override suspend fun submitSolution(sessionId: String, answers: List<String>): Result<Unit> {
         return try {
-            if (!ensureConnected()) {
-                return Result.Error("WebSocket not connected")
-            }
-            val request = WebSocketMessage.SubmitSolutionRequest(
-                sessionId = sessionId,
-                answers = answers
-            )
-            if (!webSocketService.sendMessage(request)) {
-                return Result.Error("Failed to send submit solution request")
-            }
+            if (!ensureConnected()) return Result.Error("WebSocket not connected")
+            val request = WebSocketMessage.SubmitSolutionRequest(sessionId = sessionId, answers = answers)
+            if (!webSocketService.sendMessage(request)) return Result.Error("Failed to send submit solution request")
             Result.Success(Unit)
         } catch (e: Exception) {
             Result.Error("Submit solution failed: ${e.message}", e)
@@ -262,18 +168,9 @@ class GameRepositoryImpl @Inject constructor(
 
     override suspend fun saveNote(sessionId: String, playerId: String, clueId: String, content: String): Result<Unit> {
         return try {
-            if (!ensureConnected()) {
-                return Result.Error("WebSocket not connected")
-            }
-            val request = WebSocketMessage.SaveNoteRequest(
-                sessionId = sessionId,
-                playerId = playerId,
-                clueId = clueId,
-                content = content
-            )
-            if (!webSocketService.sendMessage(request)) {
-                return Result.Error("Failed to send save note request")
-            }
+            if (!ensureConnected()) return Result.Error("WebSocket not connected")
+            val request = WebSocketMessage.SaveNoteRequest(sessionId = sessionId, playerId = playerId, clueId = clueId, content = content)
+            if (!webSocketService.sendMessage(request)) return Result.Error("Failed to send save note request")
             Result.Success(Unit)
         } catch (e: Exception) {
             Result.Error("Save note failed: ${e.message}", e)
@@ -282,19 +179,27 @@ class GameRepositoryImpl @Inject constructor(
 
     override suspend fun validateSolution(sessionId: String, approved: Boolean): Result<Unit> {
         return try {
-            if (!ensureConnected()) {
-                return Result.Error("WebSocket not connected")
-            }
-            val request = WebSocketMessage.ValidateSolutionRequest(
-                sessionId = sessionId,
-                approved = approved
-            )
-            if (!webSocketService.sendMessage(request)) {
-                return Result.Error("Failed to send validate solution request")
-            }
+            if (!ensureConnected()) return Result.Error("WebSocket not connected")
+            val request = WebSocketMessage.ValidateSolutionRequest(sessionId = sessionId, approved = approved)
+            if (!webSocketService.sendMessage(request)) return Result.Error("Failed to send validate solution request")
             Result.Success(Unit)
         } catch (e: Exception) {
             Result.Error("Validate solution failed: ${e.message}", e)
+        }
+    }
+
+    override suspend fun leaveLobby() {
+        try {
+            if (webSocketService.isConnected()) {
+                val request = WebSocketMessage.LeaveLobbyRequest()
+                webSocketService.sendMessage(request)
+            }
+        } catch (e: Exception) {
+            Log.e("Error", e.message.toString())
+        } finally {
+            webSocketService.disconnect()
+            currentSession.value = null
+            currentGameState.value = null
         }
     }
 
@@ -311,21 +216,18 @@ class GameRepositoryImpl @Inject constructor(
         return webSocketService.messages
             .filter {
                 (it is WebSocketMessage.LobbyUpdateResponse && it.sessionId == sessionId) ||
-                        (it is WebSocketMessage.LobbyInfoResponse && it.sessionId == sessionId)
+                        (it is WebSocketMessage.LobbyInfoResponse && it.sessionId == sessionId) ||
+                        (it is WebSocketMessage.LobbyDestroyedResponse)
             }
             .map { message ->
                 when (message) {
                     is WebSocketMessage.LobbyUpdateResponse -> {
                         val players = message.players.map { playerDto ->
-                            Player(
-                                name = playerDto.name,
-                                role = com.app.findthebug.core.common.PlayerRole.fromInt(playerDto.role)
-                            )
+                            Player(name = playerDto.name, role = com.app.findthebug.core.common.PlayerRole.fromInt(playerDto.role))
                         }
                         Session(
                             sessionId = message.sessionId,
                             players = players,
-                            hostPlayerId = players.find { it.role == com.app.findthebug.core.common.PlayerRole.HOST }?.name,
                             masterPlayerId = players.find { it.role == com.app.findthebug.core.common.PlayerRole.MASTER }?.name,
                             canStart = message.canStart
                         ).also { currentSession.value = it }
@@ -333,52 +235,32 @@ class GameRepositoryImpl @Inject constructor(
                     is WebSocketMessage.LobbyInfoResponse -> {
                         if (message.exists && message.players != null) {
                             val players = message.players.map { playerDto ->
-                                Player(
-                                    name = playerDto.name,
-                                    role = com.app.findthebug.core.common.PlayerRole.fromInt(playerDto.role)
-                                )
+                                Player(name = playerDto.name, role = com.app.findthebug.core.common.PlayerRole.fromInt(playerDto.role))
                             }
                             Session(
                                 sessionId = message.sessionId!!,
                                 players = players,
-                                hostPlayerId = players.find { it.role == com.app.findthebug.core.common.PlayerRole.HOST }?.name,
                                 masterPlayerId = players.find { it.role == com.app.findthebug.core.common.PlayerRole.MASTER }?.name
                             ).also { currentSession.value = it }
                         } else {
                             null
                         }
                     }
+                    is WebSocketMessage.LobbyDestroyedResponse -> {
+                        null
+                    }
                     else -> null
                 }
             }
     }
 
-    override fun observeMessages(): Flow<WebSocketMessage> {
-        return webSocketService.messages
-    }
+    override fun observeMessages(): Flow<WebSocketMessage> = webSocketService.messages
 
-    override fun connectWebSocket() {
-        webSocketService.connect()
-    }
+    override fun connectWebSocket() = webSocketService.connect()
 
-    override fun disconnectWebSocket() {
-        webSocketService.disconnect()
-    }
+    override fun disconnectWebSocket() = webSocketService.disconnect()
 
-    override fun isConnected(): Boolean {
-        return webSocketService.isConnected()
-    }
-
-    override suspend fun leaveLobby() {
-        try {
-            if (webSocketService.isConnected()) {
-                val request = WebSocketMessage.LeaveLobbyRequest()
-                webSocketService.sendMessage(request)
-            }
-        } catch (e: Exception) {
-            Log.e("Error", e.message.toString())
-        }
-        }
+    override fun isConnected(): Boolean = webSocketService.isConnected()
 
     private fun convertToGameState(response: WebSocketMessage.GameStateUpdateResponse): GameState {
         return GameState(

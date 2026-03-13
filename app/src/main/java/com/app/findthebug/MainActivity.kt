@@ -15,14 +15,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.view.WindowCompat
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.app.findthebug.core.common.Result
 import com.app.findthebug.core.datastore.SessionPreferences
+import com.app.findthebug.domain.usecase.session.ValidateSessionUseCase
 import com.app.findthebug.navigation.Screen
 import com.app.findthebug.presentation.cases.CaseDetailScreen
 import com.app.findthebug.presentation.home.HomeScreen
@@ -34,6 +36,7 @@ import com.app.findthebug.presentation.scenario.DebugScenarioScreen
 import com.app.findthebug.presentation.viewmodel.GameViewModel
 import com.app.findthebug.presentation.viewmodel.LobbyViewModel
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -43,10 +46,29 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var sessionPreferences: SessionPreferences
 
+    @Inject
+    lateinit var validateSessionUseCase: ValidateSessionUseCase
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         WindowCompat.setDecorFitsSystemWindows(window, false)
+
+        lifecycleScope.launch {
+            val sessionId = sessionPreferences.sessionId.first()
+            val playerName = sessionPreferences.playerName.first()
+            val active = sessionPreferences.isSessionActive.first()
+
+            if (active && sessionId != null && playerName != null) {
+                val isValid = when (val result = validateSessionUseCase(sessionId, playerName)) {
+                    is Result.Success -> result.data
+                    else -> false
+                }
+                if (!isValid) {
+                    sessionPreferences.clearSession()
+                }
+            }
+        }
 
         setContent {
             MaterialTheme {
@@ -99,6 +121,7 @@ class MainActivity : ComponentActivity() {
                 HomeScreen(
                     onPlay = { startNewGame() },
                     onResumeSession = { _, _ -> resumeSession() },
+                    onNewGame = { startNewGame() },
                     hasActiveSession = hasActiveSession
                 )
             }

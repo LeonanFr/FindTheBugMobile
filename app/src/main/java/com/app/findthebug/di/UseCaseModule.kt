@@ -29,11 +29,6 @@ object UseCaseModule {
         return JoinLobbyUseCase(gameRepository)
     }
 
-    @Provides
-    @ViewModelScoped
-    fun provideJoinAsMasterUseCase(gameRepository: com.app.findthebug.domain.repository.IGameRepository): JoinAsMasterUseCase {
-        return JoinAsMasterUseCase(gameRepository)
-    }
 
     @Provides
     @ViewModelScoped
