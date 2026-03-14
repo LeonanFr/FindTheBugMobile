@@ -1,106 +1,115 @@
 package com.app.findthebug.presentation.investigation
 
+import android.util.Log
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.app.findthebug.R
-import com.app.findthebug.core.common.ActionType
 import com.app.findthebug.core.common.TargetType
 import com.app.findthebug.domain.model.ConnectionNode
 import com.app.findthebug.domain.model.FunctionNode
 import com.app.findthebug.domain.model.ModuleNode
-import com.app.findthebug.presentation.components.ActionMenu
-import com.app.findthebug.presentation.components.BackButton
-import com.app.findthebug.presentation.components.ClueNoteDialog
-import com.app.findthebug.presentation.components.DayCounter
-import com.app.findthebug.presentation.components.EvidencePanel
-import com.app.findthebug.presentation.components.PFBadge
-import com.app.findthebug.presentation.components.TimerDisplay
+import com.app.findthebug.presentation.components.*
 import com.app.findthebug.presentation.viewmodel.CasesViewModel
 import com.app.findthebug.presentation.viewmodel.GameViewModel
 import kotlinx.coroutines.flow.collectLatest
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun InvestigationScreen(
     caseId: String,
     gameViewModel: GameViewModel,
     casesViewModel: CasesViewModel = hiltViewModel(),
     onBack: () -> Unit,
-    onSubmitSolution: () -> Unit
+    onSubmitSolution: () -> Unit,
+    onNavigateHome: () -> Unit
 ) {
     val gameState by gameViewModel.currentGameState.collectAsStateWithLifecycle()
     val session by gameViewModel.currentSession.collectAsStateWithLifecycle()
     val caseDetails by casesViewModel.selectedCase.collectAsStateWithLifecycle()
     val isLoadingCase by casesViewModel.isLoading.collectAsStateWithLifecycle()
-    val errorCase by casesViewModel.errorMessage.collectAsStateWithLifecycle()
     val currentPlayerName by gameViewModel.currentPlayerName.collectAsStateWithLifecycle()
+    val sessionEnded by gameViewModel.showSessionEndedDialog.collectAsStateWithLifecycle()
+    var showBriefing by remember { mutableStateOf(false) }
+
+    val isInitialDataLoaded = caseDetails != null && gameState != null
+    val isActuallyLoading = isLoadingCase || !isInitialDataLoaded
+
     val clues = gameState?.discoveredClues ?: emptyList()
 
-    val isMaster = currentPlayerName == session?.masterPlayerId
-    val isMyTurn = gameState?.currentTurnPlayer == currentPlayerName && !isMaster
-    val remainingPF = gameState?.remainingPoints ?: 0
-    val currentDay = gameState?.currentDay ?: 1
-    val maxDays = 5
-    val daysLeft = (maxDays - currentDay + 1).coerceAtLeast(0)
+    val localName = currentPlayerName?.trim() ?: ""
+    val serverTurnName = gameState?.currentTurnPlayer?.trim() ?: ""
 
-    LaunchedEffect(caseId) {
-        if (caseDetails?.id != caseId) {
-            casesViewModel.loadCaseDetails(caseId)
+    val selfPlayer = session?.players?.find {
+        it.name.trim().equals(localName, ignoreCase = true)
+    }
+
+    val isMaster = selfPlayer?.role == com.app.findthebug.core.common.PlayerRole.MASTER
+
+    val isMyTurn = serverTurnName.isNotEmpty() &&
+            localName.isNotEmpty() &&
+            serverTurnName.equals(localName, ignoreCase = true) &&
+            !isMaster
+
+    val canInteract = isInitialDataLoaded && !isMaster && isMyTurn
+
+    LaunchedEffect(isInitialDataLoaded) {
+        if (isInitialDataLoaded) {
+            showBriefing = true
         }
     }
 
-    var showNoteDialog by remember { mutableStateOf(false) }
-    var currentClueId by remember { mutableStateOf("") }
-    var currentClueContent by remember { mutableStateOf("") }
-    var noteTimer by remember { mutableIntStateOf(60) }
+    LaunchedEffect(localName, serverTurnName) {
+        if (localName.isEmpty()) {
+            Log.e("InvestigationSync", "ERRO: Nome local está VAZIO. O ViewModel não carregou o nome.")
+        }
+        Log.d("InvestigationSync", "Comparando: Local='$localName' vs Server='$serverTurnName' | Turno: $isMyTurn")
+    }
+
+    val remainingPF = gameState?.remainingPoints ?: 0
+    val daysLeft = (5 - (gameState?.currentDay ?: 1) + 1).coerceAtLeast(0)
+
+    var showExitDialog by remember { mutableStateOf(false) }
+    var isSidebarOpen by remember { mutableStateOf(false) }
+    var showClueDialog by remember { mutableStateOf(false) }
+    var activeClueId by remember { mutableStateOf("") }
+    var activeClueContent by remember { mutableStateOf("") }
+    var expandedModule by remember { mutableStateOf<String?>(null) }
+
+    BackHandler { if (isSidebarOpen) isSidebarOpen = false else showExitDialog = true }
+
+    LaunchedEffect(caseId) {
+        if (caseDetails?.id != caseId) casesViewModel.loadCaseDetails(caseId)
+    }
 
     LaunchedEffect(Unit) {
-        gameViewModel.revealedClue.collectLatest { (clueId, content) ->
+        gameViewModel.revealedClue.collectLatest { (id, content) ->
             if (!isMaster) {
-                currentClueId = clueId
-                currentClueContent = content
-                noteTimer = 60
-                showNoteDialog = true
+                activeClueId = id
+                activeClueContent = content
+                showClueDialog = true
             }
+        }
+        gameViewModel.navigationEvent.collect { event ->
+            if (event is GameViewModel.NavigationEvent.GoToHome) onNavigateHome()
         }
     }
 
@@ -108,288 +117,203 @@ fun InvestigationScreen(
     var selectedTargetType by remember { mutableStateOf<TargetType?>(null) }
     var selectedTargetName by remember { mutableStateOf<String?>(null) }
     var showActionMenu by remember { mutableStateOf(false) }
-    var expandedModule by remember { mutableStateOf<String?>(null) }
 
-    fun onTargetSelected(targetId: String, targetType: TargetType, targetName: String) {
-        if (isMaster) return
-        selectedTargetId = targetId
-        selectedTargetType = targetType
-        selectedTargetName = targetName
-        showActionMenu = true
-    }
+    val density = LocalDensity.current
+    val insets = WindowInsets.safeDrawing
+    val horizontalPadding = with(density) { maxOf(insets.getLeft(this, LocalLayoutDirection.current), insets.getRight(this, LocalLayoutDirection.current)).toDp() }
+    val verticalPadding = with(density) { maxOf(insets.getTop(this), insets.getBottom(this)).toDp() }
 
-    fun executeAction(actionType: ActionType) {
-        val targetId = selectedTargetId ?: return
-        gameViewModel.executeAction(actionType.value, targetId)
-        showActionMenu = false
-        selectedTargetId = null
-        selectedTargetType = null
-        selectedTargetName = null
-    }
+    Box(modifier = Modifier.fillMaxSize().background(Color(0xFF1F2429))) {
+        if (isActuallyLoading) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = Color(0xFF00B7C3))
+            }
+        } else {
+            Column(modifier = Modifier.fillMaxSize().padding(horizontal = horizontalPadding, vertical = verticalPadding)) {
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFF1F2429))
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                BackButton(onClick = onBack)
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = caseDetails?.title ?: "Investigação",
-                    color = Color(0xFFE9EEF1),
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(1f)
-                )
-                EvidencePanel(
-                    clues = clues,
-                    currentPlayerName = currentPlayerName ?: "",
-                    onNoteClick = { clue ->
-                        if (!isMaster) {
-                            currentClueId = clue.id
-                            currentClueContent = clue.content
-                            noteTimer = 60
-                            showNoteDialog = true
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(12.dp)) {
+                    BackButton(onClick = { showExitDialog = true })
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(caseDetails!!.title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        val bannerColor = if (isMaster) Color(0xFFB583FF) else if (isMyTurn) Color(0xFF00B7C3) else Color(0xFF7F8C95)
+                        Surface(color = bannerColor.copy(0.2f), shape = RoundedCornerShape(4.dp)) {
+                            Text(
+                                text = if (isMaster) "MODO MESTRE" else if (isMyTurn) "SUA VEZ" else "VEZ DE: ${gameState?.currentTurnPlayer?.uppercase()}",
+                                color = bannerColor,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Black,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
                         }
                     }
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                if (isMaster) {
-                    Box(
-                        modifier = Modifier
-                            .background(Color(0xFF2E3A44), RoundedCornerShape(10.dp))
-                            .padding(horizontal = 12.dp, vertical = 8.dp)
+
+                    IconButton(onClick = { showBriefing = true }) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_briefing),
+                            contentDescription = "Briefing",
+                            tint = Color.White,
+                            modifier = Modifier.size(28.dp).padding(horizontal = 8.dp)
+                        )
+                    }
+
+                    BadgedBox(
+                        badge = { if(clues.isNotEmpty()) Badge(containerColor = Color(0xFF00B7C3)) { Text(clues.size.toString()) } }
                     ) {
-                        Text(
-                            text = "Modo Mestre",
-                            color = Color(0xFFB583FF),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        IconButton(onClick = { isSidebarOpen = true }) {
+                            Icon(painterResource(R.drawable.ic_evidence), "Evidências", tint = Color.White, modifier = Modifier.size(32.dp))
+                        }
                     }
-                } else {
-                    Button(
-                        onClick = onSubmitSolution,
-                        shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFDE1B1B),
-                            contentColor = Color.White
-                        )
-                    ) {
-                        Text("Declarar Solução", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+
+                    if (!isMaster) {
+                        Button(onClick = onSubmitSolution, enabled = canInteract, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDE1B1B)), modifier = Modifier.height(38.dp).padding(horizontal = 8.dp)) {
+                            Text("SOLUÇÃO", fontSize = 10.sp, fontWeight = FontWeight.Black)
+                        }
                     }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(10.dp))
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(18.dp)
-            ) {
-                PFBadge(points = remainingPF)
-                DayCounter(daysLeft = daysLeft)
-                Text(
-                    text = "Vez de: ${gameState?.currentTurnPlayer ?: "..."}",
-                    color = if (isMyTurn) Color(0xFF8AB4F8) else Color(0xFF9AA5B0),
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium
-                )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            if (isLoadingCase) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = Color(0xFF00B7C3))
-                }
-            } else if (errorCase != null) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(text = errorCase!!, color = Color(0xFFFF6B6B), fontSize = 16.sp)
-                }
-            } else if (caseDetails != null) {
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    item {
-                        Text(
-                            text = "Módulos",
-                            color = Color(0xFFB0B8C0),
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    PFBadge(points = remainingPF)
+                    DayCounter(daysLeft = daysLeft)
+                    if (isMyTurn) {
+                        Text("PULAR TURNO", color = Color(0xFF00B7C3).copy(0.7f), fontSize = 10.sp, fontWeight = FontWeight.Black, modifier = Modifier.clickable { gameViewModel.skipTurn() })
                     }
-                    items(caseDetails!!.systemTopology.modules) { module ->
-                        ModuleItem(
+                }
+
+                LazyVerticalGrid(columns = GridCells.Fixed(2), contentPadding = PaddingValues(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxSize()) {
+                    item(span = { GridItemSpan(2) }) { Text("MÓDULOS", color = Color(0xFF5A6268), fontSize = 11.sp, fontWeight = FontWeight.Black) }
+
+                    items(caseDetails!!.systemTopology.modules) { module: ModuleNode ->
+                        ModuleCard(
                             module = module,
                             isExpanded = expandedModule == module.name,
-                            onToggleExpand = { expandedModule = if (expandedModule == module.name) null else module.name },
                             functions = caseDetails!!.systemTopology.functions.filter { it.parentId == module.name },
-                            onModuleAction = { targetId, targetType, targetName ->
-                                onTargetSelected(targetId, targetType, targetName)
+                            onToggle = { expandedModule = if (expandedModule == module.name) null else module.name },
+                            onAction = {
+                                selectedTargetId = module.name
+                                selectedTargetType = TargetType.MODULE
+                                selectedTargetName = module.name
+                                showActionMenu = true
                             },
-                            isMaster = isMaster
+                            onFunctionAction = { fn: FunctionNode ->
+                                selectedTargetId = fn.name
+                                selectedTargetType = TargetType.FUNCTION
+                                selectedTargetName = fn.name
+                                showActionMenu = true
+                            },
+                            canInteract = canInteract
                         )
                     }
-                    if (caseDetails!!.systemTopology.connections.isNotEmpty()) {
-                        item {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "Conexões",
-                                color = Color(0xFFB0B8C0),
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        items(caseDetails!!.systemTopology.connections) { connection ->
-                            ConnectionItem(
-                                connection = connection,
-                                onClick = {
-                                    onTargetSelected(connection.id, TargetType.CONNECTION, "${connection.from} → ${connection.to}")
-                                },
-                                isMaster = isMaster
-                            )
-                        }
+
+                    item(span = { GridItemSpan(2) }) { Spacer(modifier = Modifier.height(12.dp)); Text("CONEXÕES", color = Color(0xFF5A6268), fontSize = 11.sp, fontWeight = FontWeight.Black) }
+
+                    items(caseDetails!!.systemTopology.connections) { conn: ConnectionNode ->
+                        ConnectionCard(
+                            connection = conn,
+                            onClick = {
+                                selectedTargetId = conn.id
+                                selectedTargetType = TargetType.CONNECTION
+                                selectedTargetName = "${conn.from} → ${conn.to}"
+                                showActionMenu = true
+                            },
+                            canInteract = canInteract
+                        )
                     }
                 }
             }
         }
-    }
 
-    if (showNoteDialog && !isMaster) {
-        ClueNoteDialog(
-            clueContent = currentClueContent,
-            initialNote = clues.find { it.id == currentClueId }?.playerNotes?.get(currentPlayerName) ?: "",
-            timeLeft = noteTimer,
-            onSave = { note ->
-                gameViewModel.saveNote(currentClueId, note)
-                showNoteDialog = false
-            },
-            onDismiss = { showNoteDialog = false }
-        )
-        TimerDisplay(
-            initialSeconds = noteTimer,
-            isActive = showNoteDialog,
-            onFinish = { showNoteDialog = false }
+        if (isSidebarOpen) {
+            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)).clickable { isSidebarOpen = false }) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.CenterEnd) {
+                    EvidenceSidebar(
+                        isVisible = isSidebarOpen,
+                        clues = clues,
+                        currentPlayerName = localName,
+                        onClose = { isSidebarOpen = false },
+                        onSaveNote = { id, text -> gameViewModel.saveNote(id, text) }
+                    )
+                }
+            }
+        }
+
+        if (showClueDialog) {
+            ClueRevealedDialog(clueContent = activeClueContent, onSaveAndExit = { note -> gameViewModel.saveNote(activeClueId, note); showClueDialog = false })
+        }
+
+        if (showActionMenu && canInteract) {
+            ActionMenu(
+                targetName = selectedTargetName ?: "",
+                targetId = selectedTargetId ?: "",
+                targetType = selectedTargetType!!,
+                remainingPF = remainingPF,
+                discoveredClues = clues,
+                onActionSelected = { action -> gameViewModel.executeAction(action.value, selectedTargetId!!) },
+                onDismiss = { showActionMenu = false }
+            )
+        }
+    }
+    if (showBriefing && caseDetails != null) {
+        BriefingDialog(
+            title = caseDetails!!.title,
+            description = caseDetails!!.description,
+            questions = caseDetails!!.solutionQuestions,
+            onDismiss = { showBriefing = false }
         )
     }
-
-    if (showActionMenu && !isMaster && selectedTargetId != null && selectedTargetType != null) {
-        ActionMenu(
-            targetName = selectedTargetName ?: "",
-            targetType = selectedTargetType!!,
-            remainingPF = remainingPF,
-            onActionSelected = { actionType -> executeAction(actionType) },
-            onDismiss = { showActionMenu = false }
-        )
+    if (showExitDialog) {
+        Dialog(onDismissRequest = { showExitDialog = false }) {
+            Surface(shape = RoundedCornerShape(12.dp), color = Color(0xFF232A30)) {
+                Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("ABANDONAR INVESTIGAÇÃO?", color = Color.White, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Button(onClick = { gameViewModel.leaveGame() }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDE1B1B))) { Text("SAIR DA PARTIDA") }
+                    TextButton(onClick = { showExitDialog = false }) { Text("CANCELAR", color = Color.White) }
+                }
+            }
+        }
     }
 }
 
 @Composable
-fun ModuleItem(
+fun ModuleCard(
     module: ModuleNode,
     isExpanded: Boolean,
-    onToggleExpand: () -> Unit,
     functions: List<FunctionNode>,
-    onModuleAction: (String, TargetType, String) -> Unit,
-    isMaster: Boolean
+    onToggle: () -> Unit,
+    onAction: () -> Unit,
+    onFunctionAction: (FunctionNode) -> Unit,
+    canInteract: Boolean
 ) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF232A30)
-        )
+        modifier = Modifier.fillMaxWidth().animateContentSize(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF232A30))
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(enabled = !isMaster) { onToggleExpand() }
-                .padding(16.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(
-                    painter = painterResource(id = R.drawable.ic_module),
-                    contentDescription = null,
-                    tint = Color(0xFF8AB4F8),
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = module.name,
-                    color = Color(0xFFE9EEF1),
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(1f)
-                )
-                if (!isMaster) {
-                    IconButton(
-                        onClick = { onModuleAction(module.name, TargetType.MODULE, module.name) }
-                    ) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.ic_action),
-                            contentDescription = "Ações",
-                            tint = Color(0xFF9AA5B0)
-                        )
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(painterResource(R.drawable.ic_module), null, tint = Color(0xFF8AB4F8), modifier = Modifier.size(24.dp))
+                Text(module.name, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f).padding(start = 10.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (canInteract) {
+                    IconButton(onClick = onAction, modifier = Modifier.size(32.dp)) {
+                        Icon(painterResource(R.drawable.ic_action), null, tint = Color(0xFF00B7C3), modifier = Modifier.size(20.dp))
                     }
-                } else {
-                    Spacer(modifier = Modifier.width(48.dp))
                 }
             }
-
+            Text(
+                text = if (isExpanded) "RECOLHER" else "VER FUNÇÕES (${functions.size})",
+                color = Color(0xFF00B7C3),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Black,
+                modifier = Modifier.padding(top = 10.dp).clickable { onToggle() }
+            )
             if (isExpanded) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Funções internas",
-                    color = Color(0xFFB0B8C0),
-                    fontSize = 14.sp,
-                    modifier = Modifier.padding(start = 36.dp)
-                )
-                functions.forEach { function ->
+                functions.forEach { fn ->
                     Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable(enabled = !isMaster) {
-                                onModuleAction(function.name, TargetType.FUNCTION, function.name)
-                            }
-                            .padding(start = 36.dp, top = 8.dp, bottom = 8.dp, end = 16.dp)
+                        modifier = Modifier.fillMaxWidth().clickable(enabled = canInteract) { onFunctionAction(fn) }.padding(vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.ic_function),
-                            contentDescription = null,
-                            tint = Color(0xFFB583FF),
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = function.name,
-                            color = Color(0xFFE9EEF1),
-                            fontSize = 16.sp,
-                            modifier = Modifier.weight(1f)
-                        )
-                        if (!isMaster) {
-                            Icon(
-                                painter = painterResource(id = R.drawable.ic_action_small),
-                                contentDescription = "Ações",
-                                tint = Color(0xFF9AA5B0),
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
+                        Icon(painterResource(R.drawable.ic_function), null, tint = Color(0xFFB583FF), modifier = Modifier.size(16.dp))
+                        Text(fn.name, color = Color.White, fontSize = 14.sp, modifier = Modifier.padding(start = 10.dp), maxLines = 1)
                     }
                 }
             }
@@ -398,49 +322,14 @@ fun ModuleItem(
 }
 
 @Composable
-fun ConnectionItem(
-    connection: ConnectionNode,
-    onClick: () -> Unit,
-    isMaster: Boolean
-) {
+fun ConnectionCard(connection: ConnectionNode, onClick: () -> Unit, canInteract: Boolean) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = !isMaster) { onClick() }
-            .padding(vertical = 4.dp),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF232A30)
-        )
+        modifier = Modifier.fillMaxWidth().clickable(enabled = canInteract) { onClick() },
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF232A30))
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            Icon(
-                painter = painterResource(id = R.drawable.ic_connection),
-                contentDescription = null,
-                tint = Color(0xFFF9A825),
-                modifier = Modifier.size(24.dp)
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Text(
-                text = "${connection.from} → ${connection.to}",
-                color = Color(0xFFE9EEF1),
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.weight(1f)
-            )
-            if (!isMaster) {
-                Icon(
-                    painter = painterResource(id = R.drawable.ic_action_small),
-                    contentDescription = "Ações",
-                    tint = Color(0xFF9AA5B0),
-                    modifier = Modifier.size(16.dp)
-                )
-            }
+        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(painterResource(R.drawable.ic_connection), null, tint = Color(0xFFF9A825), modifier = Modifier.size(20.dp))
+            Text("${connection.from} → ${connection.to}", color = Color.White, fontSize = 13.sp, modifier = Modifier.padding(start = 10.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }

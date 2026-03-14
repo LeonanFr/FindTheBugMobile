@@ -22,6 +22,7 @@ class WebSocketService @Inject constructor() {
 
     private var webSocket: WebSocket? = null
     private var client: OkHttpClient? = null
+    private var isConnecting = false
 
     private val _messages = MutableSharedFlow<WebSocketMessage>(extraBufferCapacity = 64)
     val messages: Flow<WebSocketMessage> = _messages.asSharedFlow()
@@ -39,42 +40,53 @@ class WebSocketService @Inject constructor() {
     private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     fun connect() {
-        if (connectionState.value is ConnectionState.CONNECTED ||
-            connectionState.value is ConnectionState.CONNECTING) {
+        if (connectionState.value is ConnectionState.CONNECTED || isConnecting) {
             return
         }
 
+        isConnecting = true
         _connectionState.value = ConnectionState.CONNECTING
 
         coroutineScope.launch {
             try {
+                webSocket?.cancel()
+                cleanup()
+
                 val wsClient = OkHttpClient.Builder()
                     .connectTimeout(10, TimeUnit.SECONDS)
-                    .readTimeout(0, TimeUnit.SECONDS)
-                    .writeTimeout(10, TimeUnit.SECONDS)
                     .pingInterval(30, TimeUnit.SECONDS)
                     .build()
 
                 client = wsClient
-
-                val request = Request.Builder()
-                    .url(Constants.WS_URL)
-                    .build()
-
-                val listener = createWebSocketListener()
-                webSocket = wsClient.newWebSocket(request, listener)
+                val request = Request.Builder().url(Constants.WS_URL).build()
+                webSocket = wsClient.newWebSocket(request, createWebSocketListener())
 
                 withTimeoutOrNull(10000) {
                     connectionState.filter { it is ConnectionState.CONNECTED }.first()
                 } ?: run {
-                    _connectionState.value = ConnectionState.ERROR("Connection timeout")
-                    disconnect()
+                    if (isConnecting) {
+                        _connectionState.value = ConnectionState.ERROR("Timeout na conexão")
+                        disconnect()
+                    }
                 }
             } catch (e: Exception) {
-                _connectionState.value = ConnectionState.ERROR("Connection failed: ${e.message}")
-                Log.e("WebSocketService", "Connection error", e)
+                _connectionState.value = ConnectionState.ERROR("Falha: ${e.message}")
+                isConnecting = false
             }
         }
+    }
+
+    fun disconnect() {
+        isConnecting = false
+        webSocket?.cancel()
+        cleanup()
+        _connectionState.value = ConnectionState.DISCONNECTED
+    }
+
+    private fun cleanup() {
+        webSocket = null
+        client?.dispatcher?.executorService?.shutdownNow()
+        client = null
     }
 
     private fun createWebSocketListener(): WebSocketListener {
@@ -189,18 +201,6 @@ class WebSocketService @Inject constructor() {
         } catch (_: Exception) {
             null
         }
-    }
-
-    fun disconnect() {
-        webSocket?.close(1000, "Normal closure")
-        cleanup()
-        _connectionState.value = ConnectionState.DISCONNECTED
-    }
-
-    private fun cleanup() {
-        webSocket = null
-        client?.dispatcher?.executorService?.shutdown()
-        client = null
     }
 
     fun isConnected(): Boolean = connectionState.value is ConnectionState.CONNECTED

@@ -48,18 +48,23 @@ fun LobbyRoomScreen(
     sessionId: String,
     viewModel: LobbyViewModel,
     onStartGame: () -> Unit,
-    onNavigateHome: () -> Unit
+    onNavigateHome: () -> Unit,
+    onNavigateToInvestigation: (String) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     LaunchedEffect(uiState.session) {
         android.util.Log.d("LobbyRoom", "Players recebidos: ${uiState.session?.players?.map { it.name }}")
     }
+
     LaunchedEffect(Unit) {
         viewModel.navigationEvent.collect { event ->
             when (event) {
                 is LobbyViewModel.NavigationEvent.GoToHome -> {
                     onNavigateHome()
+                }
+                is LobbyViewModel.NavigationEvent.GoToInvestigation -> {
+                    onNavigateToInvestigation(event.caseId)
                 }
             }
         }

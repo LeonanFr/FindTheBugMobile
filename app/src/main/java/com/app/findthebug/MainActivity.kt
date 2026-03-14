@@ -72,16 +72,22 @@ class MainActivity : ComponentActivity() {
         val lobbyViewModel: LobbyViewModel = hiltViewModel()
         val gameViewModel: GameViewModel = hiltViewModel()
 
-
         LaunchedEffect(Unit) {
             lobbyViewModel.navigationEvent.collect { event ->
                 when (event) {
                     is LobbyViewModel.NavigationEvent.GoToHome -> {
                         navController.popBackStack(Screen.Home.route, inclusive = false)
                     }
+                    is LobbyViewModel.NavigationEvent.GoToInvestigation -> {
+                        navController.navigate(Screen.Investigation.passCaseId(event.caseId)) {
+                            popUpTo(Screen.Home.route) { inclusive = false }
+                        }
+                    }
                 }
             }
         }
+
+
 
         fun startNewGame() {
             if (isNavigating) return
@@ -95,15 +101,27 @@ class MainActivity : ComponentActivity() {
         fun resumeSession(sessionId: String, playerName: String) {
             if (isNavigating) return
             isNavigating = true
+
             lifecycleScope.launch {
-                when (lobbyViewModel.joinLobby(sessionId, playerName)) {
-                    is Result.Success<*> -> {
-                        navController.navigate(Screen.LobbyRoom.passSessionId(sessionId)) {
-                            popUpTo(Screen.Home.route) { inclusive = false }
+                gameViewModel.resetState()
+
+                when (val result = lobbyViewModel.joinLobby(sessionId, playerName)) {
+                    is Result.Success -> {
+                        val session = result.data
+                        if (session.phase != com.app.findthebug.core.common.GamePhase.LOBBY) {
+                            val caseId = session.caseId ?: "case_robotics_001"
+                            navController.navigate(Screen.Investigation.passCaseId(caseId)) {
+                                popUpTo(Screen.Home.route) { inclusive = false }
+                            }
+                        } else {
+                            navController.navigate(Screen.LobbyRoom.passSessionId(sessionId)) {
+                                popUpTo(Screen.Home.route) { inclusive = false }
+                            }
                         }
                     }
                     else -> {
                         sessionPreferences.clearSession()
+                        navController.navigate(Screen.Home.route)
                     }
                 }
                 isNavigating = false
@@ -163,6 +181,11 @@ class MainActivity : ComponentActivity() {
                             popUpTo(0) { inclusive = true }
                             launchSingleTop = true
                         }
+                    },
+                    onNavigateToInvestigation = { caseId ->
+                        navController.navigate(Screen.Investigation.passCaseId(caseId)) {
+                            popUpTo(Screen.LobbyRoom.route) { inclusive = true }
+                        }
                     }
                 )
             }
@@ -171,7 +194,12 @@ class MainActivity : ComponentActivity() {
                 DebugScenarioScreen(
                     gameViewModel = gameViewModel,
                     lobbyViewModel = lobbyViewModel,
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
+                    onNavigateToInvestigation = { caseId ->
+                        navController.navigate(Screen.Investigation.passCaseId(caseId)) {
+                            popUpTo(Screen.LobbyRoom.route) { inclusive = true }
+                        }
+                    }
                 )
             }
 
@@ -190,7 +218,13 @@ class MainActivity : ComponentActivity() {
                     caseId = caseId,
                     gameViewModel = gameViewModel,
                     onBack = { navController.popBackStack() },
+                    onNavigateHome = {
+                        navController.navigate(Screen.Home.route) {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    },
                     onSubmitSolution = {
+                        navController.navigate(Screen.Submission.route)
                     }
                 )
             }

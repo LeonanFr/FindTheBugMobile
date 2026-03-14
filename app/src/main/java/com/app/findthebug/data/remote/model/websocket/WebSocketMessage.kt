@@ -78,21 +78,24 @@ sealed class WebSocketMessage {
         @SerializedName("sessionId") val sessionId: String,
         @SerializedName("playerName") val playerName: String,
         @SerializedName("role") val role: Int? = null,
-        @SerializedName("isRejoin") val isRejoin: Boolean? = null
+        @SerializedName("isRejoin") val isRejoin: Boolean? = null,
+        @SerializedName("phase") val phase: Int? = null
     ) : WebSocketMessage()
 
     data class LobbyInfoResponse(
         @SerializedName("type") override val type: String,
         @SerializedName("exists") val exists: Boolean,
         @SerializedName("sessionId") val sessionId: String? = null,
-        @SerializedName("players") val players: List<PlayerDto>? = null
+        @SerializedName("players") val players: List<PlayerDto>? = null,
+        @SerializedName("phase") val phase: Int? = null
     ) : WebSocketMessage()
 
     data class LobbyUpdateResponse(
         @SerializedName("type") override val type: String,
         @SerializedName("sessionId") val sessionId: String,
         @SerializedName("canStart") val canStart: Boolean,
-        @SerializedName("players") val players: List<PlayerDto>
+        @SerializedName("players") val players: List<PlayerDto>,
+        @SerializedName("phase") val phase: Int? = null
     ) : WebSocketMessage()
 
     data class LobbyDestroyedResponse(
@@ -198,7 +201,6 @@ sealed class WebSocketMessage {
     }
 }
 
-// DTOs auxiliares
 data class PlayerDto(
     @SerializedName("name") val name: String,
     @SerializedName("role") val role: Int
@@ -209,5 +211,5 @@ data class DiscoveredClueDto(
     @SerializedName("targetId") val targetId: String,
     @SerializedName("type") val type: Int,
     @SerializedName("content") val content: String,
-    @SerializedName("playerNotes") val playerNotes: Map<String, String> = emptyMap()
+    @SerializedName("playerNotes") val playerNotes: Map<String, String>? = emptyMap()
 )

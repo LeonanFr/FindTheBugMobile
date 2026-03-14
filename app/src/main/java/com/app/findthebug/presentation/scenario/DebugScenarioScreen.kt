@@ -46,7 +46,8 @@ data class DebugCase(
 fun DebugScenarioScreen(
     gameViewModel: GameViewModel,
     lobbyViewModel: LobbyViewModel,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onNavigateToInvestigation: (String) -> Unit
 ) {
     val casesViewModel: CasesViewModel = hiltViewModel()
     val cases by casesViewModel.cases.collectAsStateWithLifecycle()
@@ -61,6 +62,12 @@ fun DebugScenarioScreen(
 
     LaunchedEffect(Unit) {
         casesViewModel.loadCases()
+    }
+
+    LaunchedEffect(Unit) {
+        gameViewModel.gameStarted.collect { caseId ->
+            onNavigateToInvestigation(caseId)
+        }
     }
 
     @Composable

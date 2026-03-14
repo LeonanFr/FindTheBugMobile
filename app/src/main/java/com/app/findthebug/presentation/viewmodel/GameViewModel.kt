@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.app.findthebug.core.common.PlayerRole
 import com.app.findthebug.core.common.Result
+import com.app.findthebug.core.common.ActionType
 import com.app.findthebug.core.datastore.SessionPreferences
 import com.app.findthebug.data.remote.model.websocket.WebSocketMessage
 import com.app.findthebug.domain.model.GameState
@@ -54,6 +55,9 @@ class GameViewModel @Inject constructor(
     private val _currentPlayerName = MutableStateFlow<String?>(null)
     val currentPlayerName: StateFlow<String?> = _currentPlayerName.asStateFlow()
 
+    private val _showSessionEndedDialog = MutableStateFlow(false)
+    val showSessionEndedDialog: StateFlow<Boolean> = _showSessionEndedDialog.asStateFlow()
+
     private val _revealedClue = MutableSharedFlow<Pair<String, String>>()
     val revealedClue: SharedFlow<Pair<String, String>> = _revealedClue.asSharedFlow()
 
@@ -74,11 +78,30 @@ class GameViewModel @Inject constructor(
 
     private var currentSessionId: String? = null
 
+    private val _navigationEvent = MutableSharedFlow<NavigationEvent>()
+    val navigationEvent: SharedFlow<NavigationEvent> = _navigationEvent.asSharedFlow()
+
+    sealed class NavigationEvent {
+        data class GoToInvestigation(val caseId: String) : NavigationEvent()
+        object GoToHome : NavigationEvent()
+    }
+
     init {
         viewModelScope.launch {
             sessionPreferences.playerName.collect { name ->
                 _currentPlayerName.value = name
             }
+        }
+        viewModelScope.launch {
+            sessionPreferences.sessionId.collect { id ->
+                currentSessionId = id
+                if (id != null) {
+                    getLobbyInfo(id)
+                    startObservingGameState(id)
+                }
+            }
+        }
+        viewModelScope.launch {
             gameRepository.observeMessages().collect { message ->
                 when (message) {
                     is WebSocketMessage.ClueRevealedResponse -> {
@@ -86,6 +109,9 @@ class GameViewModel @Inject constructor(
                     }
                     is WebSocketMessage.GameStartedResponse -> {
                         _gameStarted.emit(message.caseId)
+                        _navigationEvent.emit(NavigationEvent.GoToInvestigation(message.caseId))
+
+                        startObservingGameState(message.sessionId)
                     }
                     is WebSocketMessage.SolutionForReviewResponse -> {
                         _solutionForReview.emit(message)
@@ -99,9 +125,40 @@ class GameViewModel @Inject constructor(
                     is WebSocketMessage.SolutionRejectedResponse -> {
                         _solutionRejected.emit(message.message)
                     }
+                    is WebSocketMessage.LobbyDestroyedResponse -> {
+                        _showSessionEndedDialog.value = true
+                    }
                     else -> {}
                 }
             }
+        }
+    }
+
+    fun skipTurn() {
+        val sessionId = currentSessionId ?: return
+        val playerId = _currentPlayerName.value ?: return
+        viewModelScope.launch {
+            gameRepository.executeAction(sessionId, playerId, ActionType.SKIP_TURN.value, "global")
+        }
+    }
+
+    fun leaveGame() {
+        viewModelScope.launch {
+            val sid = currentSessionId
+            val name = _currentPlayerName.value
+            if (sid != null && name != null) {
+                gameRepository.leaveLobby(sid, name)
+            }
+            sessionPreferences.clearSession()
+            _navigationEvent.emit(NavigationEvent.GoToHome)
+        }
+    }
+
+    fun dismissSessionEnded() {
+        _showSessionEndedDialog.value = false
+        viewModelScope.launch {
+            sessionPreferences.clearSession()
+            _navigationEvent.emit(NavigationEvent.GoToHome)
         }
     }
 
@@ -164,8 +221,13 @@ class GameViewModel @Inject constructor(
     }
 
     fun startGame(caseId: String = "case_robotics_001") {
-        val sessionId = currentSessionId ?: return
-        val playerName = _currentPlayerName.value ?: return
+        val sessionId = currentSessionId
+        val playerName = _currentPlayerName.value
+
+        if (sessionId == null || playerName == null) {
+            _errorMessage.value = "Erro interno: Sessão não encontrada no ambiente."
+            return
+        }
 
         viewModelScope.launch {
             _isLoading.value = true
@@ -218,9 +280,13 @@ class GameViewModel @Inject constructor(
         val sessionId = currentSessionId ?: return
         val playerId = _currentPlayerName.value ?: return
 
+        val finalContent = content.ifBlank {
+            "[RELATÓRIO DE CAMPO: O investigador não registrou observações técnicas sobre este rastro de código]"
+        }
+
         viewModelScope.launch {
             _isLoading.value = true
-            when (val result = saveNoteUseCase(sessionId, playerId, clueId, content)) {
+            when (val result = saveNoteUseCase(sessionId, playerId, clueId, finalContent)) {
                 is Result.Error -> _errorMessage.value = result.message
                 else -> {}
             }
@@ -290,8 +356,6 @@ class GameViewModel @Inject constructor(
         _currentSession.value = null
         _currentGameState.value = null
         _errorMessage.value = null
-        currentSessionId = null
-        _currentPlayerName.value = null
     }
 
     fun canStartGame(): Boolean {
@@ -307,7 +371,7 @@ class GameViewModel @Inject constructor(
     fun hasRequiredPlayers(): Boolean {
         val players = _currentSession.value?.players ?: emptyList()
         val hasMaster = players.any { it.role == PlayerRole.MASTER }
-        val playerCount = players.count { it.role == PlayerRole.PLAYER }
-        return hasMaster && playerCount in 1..4
+        val hasPlayers = players.any { it.role == PlayerRole.PLAYER }
+        return hasMaster && hasPlayers && players.size >= 2
     }
 }

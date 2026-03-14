@@ -49,6 +49,7 @@ class LobbyViewModel @Inject constructor(
 
     sealed class NavigationEvent {
         object GoToHome : NavigationEvent()
+        data class GoToInvestigation(val caseId: String) : NavigationEvent()
     }
 
     private var observeJob: Job? = null
@@ -74,6 +75,9 @@ class LobbyViewModel @Inject constructor(
                                 showLobbyDestroyedDialog = true
                             )
                         }
+                    }
+                    is WebSocketMessage.GameStartedResponse -> {
+                        _navigationEvent.emit(NavigationEvent.GoToInvestigation(message.caseId))
                     }
                     is WebSocketMessage.ErrorResponse -> {
                         if (message.message.contains("not found") || message.message.contains("não encontrado")) {
