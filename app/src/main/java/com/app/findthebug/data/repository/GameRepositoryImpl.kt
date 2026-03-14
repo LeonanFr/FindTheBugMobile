@@ -44,6 +44,12 @@ class GameRepositoryImpl @Inject constructor(
                             _currentGameState.value = null
                             _currentSession.value = null
                         }
+                        is WebSocketMessage.GameStartedResponse -> {
+                            val current = _currentSession.value
+                            if (current != null) {
+                                _currentSession.value = current.copy(phase = GamePhase.INVESTIGATION)
+                            }
+                        }
                         else -> {}
                     }
                 } catch (e: Exception) {

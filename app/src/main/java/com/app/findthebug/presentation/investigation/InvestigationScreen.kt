@@ -61,7 +61,6 @@ fun InvestigationScreen(
     val selfPlayer = session?.players?.find {
         it.name.trim().equals(localName, ignoreCase = true)
     }
-
     val isMaster = selfPlayer?.role == com.app.findthebug.core.common.PlayerRole.MASTER
 
     val isMyTurn = serverTurnName.isNotEmpty() &&
@@ -71,17 +70,16 @@ fun InvestigationScreen(
 
     val canInteract = isInitialDataLoaded && !isMaster && isMyTurn
 
+    LaunchedEffect(session) {
+        if (session == null) {
+            onBack()
+        }
+    }
+
     LaunchedEffect(isInitialDataLoaded) {
         if (isInitialDataLoaded) {
             showBriefing = true
         }
-    }
-
-    LaunchedEffect(localName, serverTurnName) {
-        if (localName.isEmpty()) {
-            Log.e("InvestigationSync", "ERRO: Nome local está VAZIO. O ViewModel não carregou o nome.")
-        }
-        Log.d("InvestigationSync", "Comparando: Local='$localName' vs Server='$serverTurnName' | Turno: $isMyTurn")
     }
 
     val remainingPF = gameState?.remainingPoints ?: 0
@@ -139,7 +137,7 @@ fun InvestigationScreen(
                         val bannerColor = if (isMaster) Color(0xFFB583FF) else if (isMyTurn) Color(0xFF00B7C3) else Color(0xFF7F8C95)
                         Surface(color = bannerColor.copy(0.2f), shape = RoundedCornerShape(4.dp)) {
                             Text(
-                                text = if (isMaster) "MODO MESTRE" else if (isMyTurn) "SUA VEZ" else "VEZ DE: ${gameState?.currentTurnPlayer?.uppercase()}",
+                                text = if (isMaster) "MESTRE" else if (isMyTurn) "SUA VEZ" else "VEZ DE: ${gameState?.currentTurnPlayer?.uppercase()}",
                                 color = bannerColor,
                                 fontSize = 9.sp,
                                 fontWeight = FontWeight.Black,
@@ -151,9 +149,9 @@ fun InvestigationScreen(
                     IconButton(onClick = { showBriefing = true }) {
                         Icon(
                             painter = painterResource(R.drawable.ic_briefing),
-                            contentDescription = "Briefing",
+                            contentDescription = null,
                             tint = Color.White,
-                            modifier = Modifier.size(28.dp).padding(horizontal = 8.dp)
+                            modifier = Modifier.size(28.dp)
                         )
                     }
 
@@ -161,19 +159,20 @@ fun InvestigationScreen(
                         badge = { if(clues.isNotEmpty()) Badge(containerColor = Color(0xFF00B7C3)) { Text(clues.size.toString()) } }
                     ) {
                         IconButton(onClick = { isSidebarOpen = true }) {
-                            Icon(painterResource(R.drawable.ic_evidence), "Evidências", tint = Color.White, modifier = Modifier.size(32.dp))
+                            Icon(painterResource(R.drawable.ic_evidence), null, tint = Color.White, modifier = Modifier.size(32.dp))
                         }
                     }
 
                     if (!isMaster) {
-                        Button(onClick = onSubmitSolution, enabled = canInteract, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDE1B1B)), modifier = Modifier.height(38.dp).padding(horizontal = 8.dp)) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(onClick = onSubmitSolution, enabled = canInteract, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDE1B1B)), modifier = Modifier.height(38.dp)) {
                             Text("SOLUÇÃO", fontSize = 10.sp, fontWeight = FontWeight.Black)
                         }
                     }
                 }
 
                 Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    PFBadge(points = remainingPF)
+                    PFBadge(points = if (isMaster) 99 else remainingPF)
                     DayCounter(daysLeft = daysLeft)
                     if (isMyTurn) {
                         Text("PULAR TURNO", color = Color(0xFF00B7C3).copy(0.7f), fontSize = 10.sp, fontWeight = FontWeight.Black, modifier = Modifier.clickable { gameViewModel.skipTurn() })
@@ -231,14 +230,19 @@ fun InvestigationScreen(
                         clues = clues,
                         currentPlayerName = localName,
                         onClose = { isSidebarOpen = false },
-                        onSaveNote = { id, text -> gameViewModel.saveNote(id, text) }
+                        onSaveNote = { id, text ->
+                            if (!isMaster) gameViewModel.saveNote(id, text)
+                        }
                     )
                 }
             }
         }
 
         if (showClueDialog) {
-            ClueRevealedDialog(clueContent = activeClueContent, onSaveAndExit = { note -> gameViewModel.saveNote(activeClueId, note); showClueDialog = false })
+            ClueRevealedDialog(clueContent = activeClueContent, onSaveAndExit = { note ->
+                if (!isMaster) gameViewModel.saveNote(activeClueId, note)
+                showClueDialog = false
+            })
         }
 
         if (showActionMenu && canInteract) {
@@ -253,6 +257,7 @@ fun InvestigationScreen(
             )
         }
     }
+
     if (showBriefing && caseDetails != null) {
         BriefingDialog(
             title = caseDetails!!.title,
@@ -261,6 +266,7 @@ fun InvestigationScreen(
             onDismiss = { showBriefing = false }
         )
     }
+
     if (showExitDialog) {
         Dialog(onDismissRequest = { showExitDialog = false }) {
             Surface(shape = RoundedCornerShape(12.dp), color = Color(0xFF232A30)) {

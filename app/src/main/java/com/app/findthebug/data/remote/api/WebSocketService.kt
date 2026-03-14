@@ -135,7 +135,6 @@ class WebSocketService @Inject constructor() {
             }
         }
     }
-
     fun sendMessage(message: WebSocketMessage): Boolean {
         return try {
             if (connectionState.value !is ConnectionState.CONNECTED) {
@@ -148,12 +147,16 @@ class WebSocketService @Inject constructor() {
             val result = webSocket?.send(json) ?: false
 
             if (!result) {
-                Log.e("WebSocketService", "Failed to send message")
+                Log.e("WebSocketService", "Failed to send message: socket closed or buffer full")
+                _connectionState.value = ConnectionState.DISCONNECTED
+                webSocket = null
             }
 
             result
         } catch (e: Exception) {
-            Log.e("WebSocketService", "Error sending message", e)
+            Log.e("WebSocketService", "Error sending message - Pipe may be broken", e)
+            _connectionState.value = ConnectionState.ERROR(e.message ?: "Broken Pipe")
+            webSocket = null
             false
         }
     }
