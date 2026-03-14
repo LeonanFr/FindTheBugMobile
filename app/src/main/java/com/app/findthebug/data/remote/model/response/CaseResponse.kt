@@ -16,8 +16,10 @@ data class CaseResponse(
     @SerializedName("id") val id: String,
     @SerializedName("title") val title: String,
     @SerializedName("description") val description: String,
-    @SerializedName("systemTopology") val systemTopology: SystemTopologyDto
+    @SerializedName("systemTopology") val systemTopology: SystemTopologyDto,
+    @SerializedName("solutionQuestions") val solutionQuestions: List<String>? = null
 )
+
 
 data class SystemTopologyDto(
     @SerializedName("modules") val modules: List<ModuleDto>,

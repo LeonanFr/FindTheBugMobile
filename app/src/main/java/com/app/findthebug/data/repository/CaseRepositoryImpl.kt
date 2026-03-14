@@ -50,7 +50,8 @@ class CaseRepositoryImpl @Inject constructor(
                 modules = this.systemTopology.modules.map { com.app.findthebug.domain.model.ModuleNode(it.name) },
                 functions = this.systemTopology.functions.map { com.app.findthebug.domain.model.FunctionNode(it.name, it.parentId) },
                 connections = this.systemTopology.connections.map { com.app.findthebug.domain.model.ConnectionNode(it.id, it.from, it.to) }
-            )
+            ),
+            solutionQuestions = this.solutionQuestions ?: emptyList()
         )
     }
 
