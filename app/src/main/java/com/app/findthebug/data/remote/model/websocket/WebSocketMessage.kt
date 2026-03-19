@@ -167,9 +167,7 @@ sealed class WebSocketMessage {
             context: JsonDeserializationContext
         ): WebSocketMessage {
             val jsonObject = json.asJsonObject
-            val type = jsonObject.get("type").asString
-
-            return when (type) {
+            return when (val type = jsonObject.get("type").asString) {
                 "LOBBY_CREATED" -> context.deserialize(jsonObject, LobbyCreatedResponse::class.java)
                 "JOINED_LOBBY" -> context.deserialize(jsonObject, JoinedLobbyResponse::class.java)
                 "LOBBY_INFO" -> context.deserialize(jsonObject, LobbyInfoResponse::class.java)
