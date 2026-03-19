@@ -22,10 +22,11 @@ import kotlinx.coroutines.delay
 @Composable
 fun ClueRevealedDialog(
     clueContent: String,
+    duration: Int,
     onSaveAndExit: (String) -> Unit
 ) {
     var noteText by remember { mutableStateOf("") }
-    var timeLeft by remember { mutableIntStateOf(60) }
+    var timeLeft by remember { mutableIntStateOf(duration) }
     var currentPage by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(Unit) {
@@ -64,14 +65,13 @@ fun ClueRevealedDialog(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("${timeLeft}s ", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                         CircularProgressIndicator(
-                            progress = { timeLeft / 60f },
+                            progress = { timeLeft / duration.toFloat() }, // usa duration
                             modifier = Modifier.size(18.dp),
                             color = if (timeLeft < 10) Color(0xFFFF6B6B) else Color(0xFF00B7C3),
                             strokeWidth = 2.dp
                         )
                     }
                 }
-
                 SecondaryTabRow(
                     selectedTabIndex = currentPage,
                     containerColor = Color.Transparent,

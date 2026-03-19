@@ -1,6 +1,6 @@
 package com.app.findthebug.presentation.investigation
 
-import android.util.Log
+import kotlinx.coroutines.delay
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
@@ -49,6 +49,8 @@ fun InvestigationScreen(
     val currentPlayerName by gameViewModel.currentPlayerName.collectAsStateWithLifecycle()
     val sessionEnded by gameViewModel.showSessionEndedDialog.collectAsStateWithLifecycle()
     var showBriefing by remember { mutableStateOf(false) }
+    var clueDuration by remember { mutableIntStateOf(60) }
+    val snackbarHostState = remember { SnackbarHostState() }
 
     val isInitialDataLoaded = caseDetails != null && gameState != null
     val isActuallyLoading = isLoadingCase || !isInitialDataLoaded
@@ -82,6 +84,44 @@ fun InvestigationScreen(
         }
     }
 
+    var showTurnSkippedDialog by remember { mutableStateOf(false) }
+    var turnSkippedMessage by remember { mutableStateOf("") }
+
+    LaunchedEffect(Unit) {
+        gameViewModel.turnSkipped.collectLatest { message ->
+            turnSkippedMessage = "Turno Pulado! Vez de: ${message.previousPlayer}"
+            showTurnSkippedDialog = true
+            delay(2000)
+            showTurnSkippedDialog = false
+        }
+        gameViewModel.solutionRejected.collectLatest { message ->
+            snackbarHostState.showSnackbar(
+                message = message,
+                duration = SnackbarDuration.Long
+            )
+        }
+        gameViewModel.errorMessage.collectLatest { error ->
+            if (error != null) {
+                snackbarHostState.showSnackbar(
+                    message = error,
+                    duration = SnackbarDuration.Long
+                )
+                gameViewModel.clearError()
+            }
+        }
+    }
+
+    if (showTurnSkippedDialog) {
+        AlertDialog(
+            onDismissRequest = { showTurnSkippedDialog = false },
+            title = { Text("Aviso", color = Color(0xFFE9EEF1)) },
+            text = { Text(turnSkippedMessage, color = Color(0xFFB0B8C0)) },
+            confirmButton = {},
+            containerColor = Color(0xFF232A30),
+            tonalElevation = 8.dp
+        )
+    }
+
     val remainingPF = gameState?.remainingPoints ?: 0
     val daysLeft = (5 - (gameState?.currentDay ?: 1) + 1).coerceAtLeast(0)
 
@@ -99,10 +139,11 @@ fun InvestigationScreen(
     }
 
     LaunchedEffect(Unit) {
-        gameViewModel.revealedClue.collectLatest { (id, content) ->
+        gameViewModel.revealedClue.collectLatest { clue ->
             if (!isMaster) {
-                activeClueId = id
-                activeClueContent = content
+                activeClueId = clue.clueId
+                activeClueContent = clue.content
+                clueDuration = clue.duration
                 showClueDialog = true
             }
         }
@@ -239,10 +280,14 @@ fun InvestigationScreen(
         }
 
         if (showClueDialog) {
-            ClueRevealedDialog(clueContent = activeClueContent, onSaveAndExit = { note ->
-                if (!isMaster) gameViewModel.saveNote(activeClueId, note)
-                showClueDialog = false
-            })
+            ClueRevealedDialog(
+                clueContent = activeClueContent,
+                duration = clueDuration,
+                onSaveAndExit = { note ->
+                    if (!isMaster) gameViewModel.saveNote(activeClueId, note)
+                    showClueDialog = false
+                }
+            )
         }
 
         if (showActionMenu && canInteract) {
@@ -256,6 +301,13 @@ fun InvestigationScreen(
                 onDismiss = { showActionMenu = false }
             )
         }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(16.dp)
+        )
     }
 
     if (showBriefing && caseDetails != null) {

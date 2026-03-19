@@ -26,13 +26,16 @@ import com.app.findthebug.core.common.Result
 import com.app.findthebug.core.datastore.SessionPreferences
 import com.app.findthebug.navigation.Screen
 import com.app.findthebug.presentation.cases.CaseDetailScreen
+import com.app.findthebug.presentation.gameover.GameOverScreen
 import com.app.findthebug.presentation.home.HomeScreen
 import com.app.findthebug.presentation.investigation.InvestigationScreen
 import com.app.findthebug.presentation.lobby.CreateLobbyScreen
 import com.app.findthebug.presentation.lobby.JoinLobbyScreen
 import com.app.findthebug.presentation.lobby.LobbyRoomScreen
 import com.app.findthebug.presentation.lobby.PlayLobbyScreen
+import com.app.findthebug.presentation.master.MasterReviewScreen
 import com.app.findthebug.presentation.scenario.DebugScenarioScreen
+import com.app.findthebug.presentation.victory.VictoryScreen
 import com.app.findthebug.presentation.viewmodel.GameViewModel
 import com.app.findthebug.presentation.viewmodel.LobbyViewModel
 import dagger.hilt.android.AndroidEntryPoint
@@ -73,16 +76,51 @@ class MainActivity : ComponentActivity() {
         val gameViewModel: GameViewModel = hiltViewModel()
 
         LaunchedEffect(Unit) {
-            lobbyViewModel.navigationEvent.collect { event ->
-                when (event) {
-                    is LobbyViewModel.NavigationEvent.GoToHome -> {
-                        navController.popBackStack(Screen.Home.route, inclusive = false)
-                    }
-                    is LobbyViewModel.NavigationEvent.GoToInvestigation -> {
-                        navController.navigate(Screen.Investigation.passCaseId(event.caseId)) {
-                            popUpTo(Screen.Home.route) { inclusive = false }
+            launch {
+                lobbyViewModel.navigationEvent.collect { event ->
+                    when (event) {
+                        is LobbyViewModel.NavigationEvent.GoToHome -> {
+                            navController.popBackStack(Screen.Home.route, inclusive = false)
+                        }
+                        is LobbyViewModel.NavigationEvent.GoToInvestigation -> {
+                            navController.navigate(Screen.Investigation.passCaseId(event.caseId)) {
+                                popUpTo(Screen.Home.route) { inclusive = false }
+                            }
                         }
                     }
+                }
+            }
+
+            launch {
+                gameViewModel.navigationEvent.collect { event ->
+                    when (event) {
+                        is GameViewModel.NavigationEvent.GoToVictory -> {
+                            navController.navigate(Screen.Victory.route) {
+                                popUpTo(Screen.Home.route) { inclusive = false }
+                            }
+                        }
+                        is GameViewModel.NavigationEvent.GoToGameOver -> {
+                            navController.navigate(Screen.GameOver.route) {
+                                popUpTo(Screen.Home.route) { inclusive = false }
+                            }
+                        }
+                        is GameViewModel.NavigationEvent.GoToInvestigation -> {
+                            navController.navigate(Screen.Investigation.passCaseId(event.caseId)) {
+                                popUpTo(Screen.Home.route) { inclusive = false }
+                            }
+                        }
+                        is GameViewModel.NavigationEvent.GoToHome -> {
+                            navController.navigate(Screen.Home.route) {
+                                popUpTo(0) { inclusive = true }
+                            }
+                        }
+                    }
+                }
+            }
+
+            launch {
+                gameViewModel.solutionForReview.collect {
+                    navController.navigate(Screen.MasterReview.route)
                 }
             }
         }
@@ -185,6 +223,34 @@ class MainActivity : ComponentActivity() {
                     onNavigateToInvestigation = { caseId ->
                         navController.navigate(Screen.Investigation.passCaseId(caseId)) {
                             popUpTo(Screen.LobbyRoom.route) { inclusive = true }
+                        }
+                    }
+                )
+            }
+
+            composable(Screen.MasterReview.route) {
+                MasterReviewScreen(
+                    gameViewModel = gameViewModel,
+                    onBack = { navController.popBackStack() },
+                    onComplete = { navController.popBackStack() }
+                )
+            }
+
+            composable(Screen.Victory.route) {
+                VictoryScreen(
+                    onBackToHome = {
+                        navController.navigate(Screen.Home.route) {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    }
+                )
+            }
+
+            composable(Screen.GameOver.route) {
+                GameOverScreen(
+                    onBackToHome = {
+                        navController.navigate(Screen.Home.route) {
+                            popUpTo(0) { inclusive = true }
                         }
                     }
                 )

@@ -15,8 +15,8 @@ class ValidateSessionUseCase @Inject constructor(
                     val playerExists = session.players.any { it.name == playerName }
                     Result.Success(playerExists)
                 }
-                is Result.Error -> Result.Success(false)
-                else -> Result.Success(false)
+                is Result.Error -> Result.Error(result.message)
+                Result.Loading -> Result.Error("Estado de carregamento inesperado")
             }
         } catch (e: Exception) {
             Result.Error("Erro ao validar sessão: ${e.message}")

@@ -11,8 +11,10 @@ class EvidenceRepositoryImpl @Inject constructor() : IEvidenceRepository {
 
     override suspend fun saveEvidence(evidence: Evidence): Result<Unit> {
         return try {
-            val sessionEvidences = evidences.getOrPut(evidence.clueId) { mutableListOf() }
-            val existingIndex = sessionEvidences.indexOfFirst { it.id == evidence.id && it.playerId == evidence.playerId && it.clueId == evidence.clueId }
+            val sessionEvidences = evidences.getOrPut(evidence.sessionId) { mutableListOf() }
+            val existingIndex = sessionEvidences.indexOfFirst {
+                it.id == evidence.id && it.playerId == evidence.playerId && it.clueId == evidence.clueId
+            }
 
             if (existingIndex != -1) {
                 sessionEvidences[existingIndex] = evidence.copy(updatedAt = System.currentTimeMillis())
@@ -28,8 +30,7 @@ class EvidenceRepositoryImpl @Inject constructor() : IEvidenceRepository {
 
     override suspend fun getEvidences(sessionId: String): Result<List<Evidence>> {
         return try {
-            val allEvidences = evidences.values.flatten()
-            val sessionEvidences = allEvidences.filter { it.clueId.contains(sessionId) }
+            val sessionEvidences = evidences[sessionId] ?: emptyList()
             Result.Success(sessionEvidences.sortedBy { it.createdAt })
         } catch (e: Exception) {
             Result.Error("Failed to get evidences: ${e.message}", e)

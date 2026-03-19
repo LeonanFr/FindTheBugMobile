@@ -58,8 +58,16 @@ class GameViewModel @Inject constructor(
     private val _showSessionEndedDialog = MutableStateFlow(false)
     val showSessionEndedDialog: StateFlow<Boolean> = _showSessionEndedDialog.asStateFlow()
 
-    private val _revealedClue = MutableSharedFlow<Pair<String, String>>()
-    val revealedClue: SharedFlow<Pair<String, String>> = _revealedClue.asSharedFlow()
+    data class RevealedClueInfo(
+        val clueId: String,
+        val content: String,
+        val duration: Int
+    )
+    private val _revealedClue = MutableSharedFlow<RevealedClueInfo>()
+    val revealedClue: SharedFlow<RevealedClueInfo> = _revealedClue.asSharedFlow()
+
+    private val _turnSkipped = MutableSharedFlow<WebSocketMessage.TurnSkippedResponse>()
+    val turnSkipped: SharedFlow<WebSocketMessage.TurnSkippedResponse> = _turnSkipped.asSharedFlow()
 
     private val _gameStarted = MutableSharedFlow<String>()
     val gameStarted: SharedFlow<String> = _gameStarted.asSharedFlow()
@@ -84,6 +92,8 @@ class GameViewModel @Inject constructor(
     sealed class NavigationEvent {
         data class GoToInvestigation(val caseId: String) : NavigationEvent()
         object GoToHome : NavigationEvent()
+        object GoToVictory : NavigationEvent()
+        object GoToGameOver : NavigationEvent()
     }
 
     init {
@@ -104,9 +114,6 @@ class GameViewModel @Inject constructor(
         viewModelScope.launch {
             gameRepository.observeMessages().collect { message ->
                 when (message) {
-                    is WebSocketMessage.ClueRevealedResponse -> {
-                        _revealedClue.emit(Pair(message.clueId, message.content))
-                    }
                     is WebSocketMessage.GameStartedResponse -> {
                         _gameStarted.emit(message.caseId)
                         _navigationEvent.emit(NavigationEvent.GoToInvestigation(message.caseId))
@@ -116,17 +123,23 @@ class GameViewModel @Inject constructor(
                     is WebSocketMessage.SolutionForReviewResponse -> {
                         _solutionForReview.emit(message)
                     }
-                    is WebSocketMessage.GameVictoryResponse -> {
-                        _gameVictory.emit(Unit)
-                    }
-                    is WebSocketMessage.GameOverResponse -> {
-                        _gameOver.emit(Unit)
-                    }
                     is WebSocketMessage.SolutionRejectedResponse -> {
                         _solutionRejected.emit(message.message)
                     }
                     is WebSocketMessage.LobbyDestroyedResponse -> {
                         _showSessionEndedDialog.value = true
+                    }
+                    is WebSocketMessage.TurnSkippedResponse ->{
+                        _turnSkipped.emit(message)
+                    }
+                    is WebSocketMessage.ClueRevealedResponse -> {
+                        _revealedClue.emit(RevealedClueInfo(message.clueId, message.content, message.duration))
+                    }
+                    is WebSocketMessage.GameVictoryResponse -> {
+                        _navigationEvent.emit(NavigationEvent.GoToVictory)
+                    }
+                    is WebSocketMessage.GameOverResponse -> {
+                        _navigationEvent.emit(NavigationEvent.GoToGameOver)
                     }
                     else -> {}
                 }
