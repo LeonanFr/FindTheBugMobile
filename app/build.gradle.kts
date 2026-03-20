@@ -58,6 +58,7 @@ dependencies {
     implementation(libs.androidx.navigationevent)
     implementation(libs.androidx.compose.foundation.layout)
     implementation(libs.androidx.compose.foundation)
+    implementation(libs.androidx.compose.runtime.saveable)
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     implementation(libs.androidx.hilt.navigation.compose)

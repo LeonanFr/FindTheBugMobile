@@ -1,28 +1,12 @@
 package com.app.findthebug.presentation.submission
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -30,34 +14,56 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.app.findthebug.presentation.components.BackButton
+import com.app.findthebug.presentation.viewmodel.CasesViewModel
 import com.app.findthebug.presentation.viewmodel.GameViewModel
+import kotlinx.coroutines.launch
 
 @Composable
 fun SubmissionScreen(
+    caseId: String,
     gameViewModel: GameViewModel,
     onBack: () -> Unit,
     onSubmit: () -> Unit
 ) {
-    val gameState by gameViewModel.currentGameState.collectAsStateWithLifecycle()
+    val casesViewModel: CasesViewModel = hiltViewModel()
+    val caseDetails by casesViewModel.selectedCase.collectAsStateWithLifecycle()
     val isLoading by gameViewModel.isLoading.collectAsStateWithLifecycle()
     val errorMessage by gameViewModel.errorMessage.collectAsStateWithLifecycle()
+    val currentGameState by gameViewModel.currentGameState.collectAsStateWithLifecycle()
 
-    val questions = gameState?.case?.solutionQuestions ?: listOf(
-        "Qual componente originou o erro?",
-        "Qual função fez o erro se propagar?",
-        "Que outro lugar ele afetou?"
-    )
+    val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
 
-    var answer1 by remember { mutableStateOf("") }
-    var answer2 by remember { mutableStateOf("") }
-    var answer3 by remember { mutableStateOf("") }
+    val effectiveCaseId = remember(caseId, currentGameState) {
+        if (caseId == "{caseId}" || caseId.isBlank()) {
+            currentGameState?.case?.id ?: ""
+        } else {
+            caseId
+        }
+    }
+
+    LaunchedEffect(effectiveCaseId) {
+        if (effectiveCaseId.isNotBlank() && caseDetails?.id != effectiveCaseId) {
+            casesViewModel.loadCaseDetails(effectiveCaseId)
+        }
+    }
+
+    val questions = caseDetails?.solutionQuestions ?: emptyList()
+    val answers = remember { mutableStateListOf<String>() }
+
+    LaunchedEffect(questions.size) {
+        answers.clear()
+        answers.addAll(List(questions.size) { "" })
+    }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF1F2429))
+            .safeDrawingPadding()
     ) {
         Column(
             modifier = Modifier
@@ -79,93 +85,60 @@ fun SubmissionScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color(0xFF2E3A44), RoundedCornerShape(12.dp))
-                    .padding(16.dp)
-            ) {
-                Text(
-                    text = "Responda às perguntas abaixo. Após a submissão, o Mestre irá revisar. Respostas incorretas podem custar dias.",
-                    color = Color(0xFFB0B8C0),
-                    fontSize = 14.sp,
-                    textAlign = TextAlign.Center
-                )
-            }
-
             Spacer(modifier = Modifier.height(24.dp))
 
-            Text(
-                text = "1. ${questions.getOrElse(0) { "Pergunta 1" }}",
-                color = Color(0xFFE9EEF1),
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            OutlinedTextField(
-                value = answer1,
-                onValueChange = { answer1 = it },
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Sua resposta...", color = Color(0xFF8A97A1)) },
-                colors = TextFieldDefaults.colors(
-                    focusedTextColor = Color(0xFFE9EEF1),
-                    unfocusedTextColor = Color(0xFFE9EEF1),
-                    focusedContainerColor = Color(0xFF1C2126),
-                    unfocusedContainerColor = Color(0xFF1C2126),
-                    focusedIndicatorColor = Color(0xFF00B7C3),
-                    unfocusedIndicatorColor = Color(0xFF3A4A53)
-                )
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Text(
-                text = "2. ${questions.getOrElse(1) { "Pergunta 2" }}",
-                color = Color(0xFFE9EEF1),
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            OutlinedTextField(
-                value = answer2,
-                onValueChange = { answer2 = it },
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Sua resposta...", color = Color(0xFF8A97A1)) },
-                colors = TextFieldDefaults.colors(
-                    focusedTextColor = Color(0xFFE9EEF1),
-                    unfocusedTextColor = Color(0xFFE9EEF1),
-                    focusedContainerColor = Color(0xFF1C2126),
-                    unfocusedContainerColor = Color(0xFF1C2126),
-                    focusedIndicatorColor = Color(0xFF00B7C3),
-                    unfocusedIndicatorColor = Color(0xFF3A4A53)
-                )
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Text(
-                text = "3. ${questions.getOrElse(2) { "Pergunta 3" }}",
-                color = Color(0xFFE9EEF1),
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            OutlinedTextField(
-                value = answer3,
-                onValueChange = { answer3 = it },
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Sua resposta...", color = Color(0xFF8A97A1)) },
-                colors = TextFieldDefaults.colors(
-                    focusedTextColor = Color(0xFFE9EEF1),
-                    unfocusedTextColor = Color(0xFFE9EEF1),
-                    focusedContainerColor = Color(0xFF1C2126),
-                    unfocusedContainerColor = Color(0xFF1C2126),
-                    focusedIndicatorColor = Color(0xFF00B7C3),
-                    unfocusedIndicatorColor = Color(0xFF3A4A53)
-                )
-            )
+            if (questions.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator(color = Color(0xFF00B7C3))
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "Carregando perguntas...",
+                            color = Color(0xFF8A9095),
+                            fontSize = 16.sp
+                        )
+                    }
+                }
+            } else {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    itemsIndexed(questions) { index, question ->
+                        Column {
+                            Text(
+                                text = "${index + 1}. $question",
+                                color = Color(0xFFE9EEF1),
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            OutlinedTextField(
+                                value = answers.getOrElse(index) { "" },
+                                onValueChange = { newValue ->
+                                    if (index < answers.size) {
+                                        answers[index] = newValue
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                placeholder = { Text("Sua resposta...", color = Color(0xFF8A97A1)) },
+                                enabled = !isLoading,
+                                colors = TextFieldDefaults.colors(
+                                    focusedTextColor = Color(0xFFE9EEF1),
+                                    unfocusedTextColor = Color(0xFFE9EEF1),
+                                    focusedContainerColor = Color(0xFF1C2126),
+                                    unfocusedContainerColor = Color(0xFF1C2126),
+                                    focusedIndicatorColor = Color(0xFF00B7C3),
+                                    unfocusedIndicatorColor = Color(0xFF3A4A53)
+                                )
+                            )
+                        }
+                    }
+                }
+            }
 
             Spacer(modifier = Modifier.height(24.dp))
 
@@ -182,11 +155,18 @@ fun SubmissionScreen(
 
             Button(
                 onClick = {
-                    val answers = listOf(answer1, answer2, answer3)
-                    gameViewModel.submitSolution(answers)
-                    onSubmit()
+                    scope.launch {
+                        gameViewModel.submitSolution(answers.toList())
+                        snackbarHostState.showSnackbar(
+                            message = "Solução enviada para o mestre!",
+                            duration = SnackbarDuration.Short
+                        )
+                        onSubmit()
+                    }
                 },
-                enabled = !isLoading && answer1.isNotBlank() && answer2.isNotBlank() && answer3.isNotBlank(),
+                enabled = !isLoading &&
+                        questions.isNotEmpty() &&
+                        answers.all { it.isNotBlank() },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
@@ -207,5 +187,12 @@ fun SubmissionScreen(
                 }
             }
         }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(16.dp)
+        )
     }
 }

@@ -21,6 +21,7 @@ navigationCompose = "2.9.7"
 navigationevent = "1.0.2"
 foundationLayout = "1.10.5"
 foundation = "1.10.5"
+runtimeSaveable = "1.10.5"
 
 
 [libraries]
@@ -52,6 +53,7 @@ androidx-navigation-compose = { group = "androidx.navigation", name = "navigatio
 androidx-navigationevent = { group = "androidx.navigationevent", name = "navigationevent", version.ref = "navigationevent" }
 androidx-compose-foundation-layout = { group = "androidx.compose.foundation", name = "foundation-layout", version.ref = "foundationLayout" }
 androidx-compose-foundation = { group = "androidx.compose.foundation", name = "foundation", version.ref = "foundation" }
+androidx-compose-runtime-saveable = { group = "androidx.compose.runtime", name = "runtime-saveable", version.ref = "runtimeSaveable" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

@@ -15,7 +15,9 @@ sealed class Screen(val route: String){
     object Investigation : Screen("investigation/{caseId}") {
         fun passCaseId(caseId: String) = "investigation/$caseId"
     }
-    object Submission : Screen("submission")
+    object Submission : Screen("submission/{caseId}") {
+        fun passCaseId(caseId: String) = "submission/$caseId"
+    }
     object MasterReview : Screen("masterReview")
     object Victory : Screen("victory")
     object GameOver : Screen("gameOver")

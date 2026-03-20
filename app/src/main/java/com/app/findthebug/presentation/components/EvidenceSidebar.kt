@@ -19,13 +19,16 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.app.findthebug.core.common.ClueType
 import com.app.findthebug.domain.model.Clue
+import com.app.findthebug.domain.model.ConnectionNode
 
 @Composable
 fun EvidenceSidebar(
     isVisible: Boolean,
     clues: List<Clue>,
     currentPlayerName: String,
+    connections: List<ConnectionNode>,
     onClose: () -> Unit,
     onSaveNote: (String, String) -> Unit
 ) {
@@ -56,11 +59,16 @@ fun EvidenceSidebar(
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text("Nenhuma pista coletada.", color = Color(0xFF3F4B55))
                     }
-                }
-
-                LazyColumn(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    items(clues) { clue ->
-                        EvidenceCardInSidebar(clue = clue, playerName = currentPlayerName, onUpdateNote = { text -> onSaveNote(clue.id, text) })
+                } else {
+                    LazyColumn(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        items(clues) { clue ->
+                            EvidenceCardInSidebar(
+                                clue = clue,
+                                playerName = currentPlayerName,
+                                connections = connections,
+                                onUpdateNote = { text -> onSaveNote(clue.id, text) }
+                            )
+                        }
                     }
                 }
             }
@@ -69,9 +77,28 @@ fun EvidenceSidebar(
 }
 
 @Composable
-fun EvidenceCardInSidebar(clue: Clue, playerName: String, onUpdateNote: (String) -> Unit) {
+fun EvidenceCardInSidebar(
+    clue: Clue,
+    playerName: String,
+    connections: List<ConnectionNode>,
+    onUpdateNote: (String) -> Unit
+) {
     var isEditing by remember { mutableStateOf(false) }
     var currentNote by remember { mutableStateOf(clue.playerNotes[playerName] ?: "") }
+
+    val targetDisplayName = remember(clue.targetId, connections) {
+        when (clue.type) {
+            ClueType.INTEGRATION_TEST_RESULT, ClueType.LOG -> {
+                val connection = connections.find { it.id == clue.targetId }
+                if (connection != null) {
+                    "${connection.from} → ${connection.to}"
+                } else {
+                    clue.targetId
+                }
+            }
+            else -> clue.targetId
+        }
+    }
 
     Card(
         colors = CardDefaults.cardColors(containerColor = Color(0xFF1F2429)),
@@ -84,7 +111,7 @@ fun EvidenceCardInSidebar(clue: Clue, playerName: String, onUpdateNote: (String)
                     Text(clue.type.name, color = Color(0xFF00B7C3), fontSize = 9.sp, fontWeight = FontWeight.Black, modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp))
                 }
                 Spacer(modifier = Modifier.weight(1f))
-                Text(clue.targetId, color = Color(0xFF9AA5B0), fontSize = 10.sp, fontWeight = FontWeight.Medium)
+                Text(targetDisplayName, color = Color(0xFF9AA5B0), fontSize = 10.sp, fontWeight = FontWeight.Medium)
             }
 
             Spacer(modifier = Modifier.height(14.dp))

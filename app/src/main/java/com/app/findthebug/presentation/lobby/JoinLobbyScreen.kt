@@ -31,6 +31,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.app.findthebug.core.common.Result
 import com.app.findthebug.presentation.components.BackButton
 import com.app.findthebug.presentation.viewmodel.LobbyViewModel
 import kotlinx.coroutines.launch
@@ -46,12 +47,6 @@ fun JoinLobbyScreen(
 
     var playerName by remember { mutableStateOf("") }
     var lobbyCode by remember { mutableStateOf("") }
-
-    LaunchedEffect(uiState.session) {
-        uiState.session?.let {
-            onJoinSuccess(it.sessionId)
-        }
-    }
 
     Box(
         modifier = Modifier
@@ -113,7 +108,10 @@ fun JoinLobbyScreen(
             Button(
                 onClick = {
                     scope.launch {
-                        viewModel.joinLobby(lobbyCode, playerName)
+                        val result = viewModel.joinLobby(lobbyCode.trim().uppercase(), playerName.trim())
+                        if (result is Result.Success) {
+                            onJoinSuccess(result.data.sessionId)
+                        }
                     }
                 },
                 enabled = !uiState.isLoading && playerName.isNotBlank() && lobbyCode.isNotBlank(),

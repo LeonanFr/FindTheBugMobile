@@ -19,7 +19,6 @@ interface IGameRepository {
     suspend fun saveNote(sessionId: String, playerId: String, clueId: String, content: String): Result<Unit>
     suspend fun validateSolution(sessionId: String, approved: Boolean): Result<Unit>
 
-
     // Real-time Updates
     fun observeGameState(sessionId: String): Flow<GameState?>
     fun observeSession(sessionId: String): Flow<Session?>
@@ -29,6 +28,7 @@ interface IGameRepository {
     fun connectWebSocket()
     fun disconnectWebSocket()
     fun isConnected(): Boolean
+    fun resetWebSocket()
 
     // Leave
     suspend fun leaveLobby(sessionId: String, playerName: String)

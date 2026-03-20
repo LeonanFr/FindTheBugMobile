@@ -47,7 +47,10 @@ class GameRepositoryImpl @Inject constructor(
                         is WebSocketMessage.GameStartedResponse -> {
                             val current = _currentSession.value
                             if (current != null) {
-                                _currentSession.value = current.copy(phase = GamePhase.INVESTIGATION)
+                                _currentSession.value = current.copy(
+                                    phase = GamePhase.INVESTIGATION,
+                                    caseId = message.caseId
+                                )
                             }
                         }
                         else -> {}
@@ -61,9 +64,21 @@ class GameRepositoryImpl @Inject constructor(
 
     private suspend fun ensureConnected(): Boolean {
         if (webSocketService.isConnected()) return true
+
+        if (webSocketService.connectionState.value is WebSocketService.ConnectionState.ERROR) {
+            webSocketService.resetConnection()
+        }
+
         webSocketService.connect()
-        repeat(50) { if (webSocketService.isConnected()) return true; delay(200) }
+        repeat(50) {
+            if (webSocketService.isConnected()) return true
+            delay(200)
+        }
         return false
+    }
+
+    override fun resetWebSocket() {
+        webSocketService.resetConnection()
     }
 
     override suspend fun createLobby(playerName: String): Result<Session> {

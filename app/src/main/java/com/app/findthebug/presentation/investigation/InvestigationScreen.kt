@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.grid.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -39,7 +40,7 @@ fun InvestigationScreen(
     gameViewModel: GameViewModel,
     casesViewModel: CasesViewModel = hiltViewModel(),
     onBack: () -> Unit,
-    onSubmitSolution: () -> Unit,
+    onSubmitSolution: (String) -> Unit,
     onNavigateHome: () -> Unit
 ) {
     val gameState by gameViewModel.currentGameState.collectAsStateWithLifecycle()
@@ -47,11 +48,15 @@ fun InvestigationScreen(
     val caseDetails by casesViewModel.selectedCase.collectAsStateWithLifecycle()
     val isLoadingCase by casesViewModel.isLoading.collectAsStateWithLifecycle()
     val currentPlayerName by gameViewModel.currentPlayerName.collectAsStateWithLifecycle()
+    val isWaitingForReview by gameViewModel.isWaitingForReview.collectAsStateWithLifecycle()
     val sessionEnded by gameViewModel.showSessionEndedDialog.collectAsStateWithLifecycle()
-    var showBriefing by remember { mutableStateOf(false) }
+
+    var showBriefing by rememberSaveable { mutableStateOf(false) }
+    var hasAutoShownBriefing by rememberSaveable { mutableStateOf(false) }
     var clueDuration by remember { mutableIntStateOf(60) }
     val snackbarHostState = remember { SnackbarHostState() }
 
+    val isLoading by gameViewModel.isLoading.collectAsStateWithLifecycle()
     val isInitialDataLoaded = caseDetails != null && gameState != null
     val isActuallyLoading = isLoadingCase || !isInitialDataLoaded
 
@@ -70,17 +75,18 @@ fun InvestigationScreen(
             serverTurnName.equals(localName, ignoreCase = true) &&
             !isMaster
 
-    val canInteract = isInitialDataLoaded && !isMaster && isMyTurn
+    val canInteract = isInitialDataLoaded && !isMaster && isMyTurn && !isWaitingForReview
 
     LaunchedEffect(session) {
         if (session == null) {
-            onBack()
+            onNavigateHome()
         }
     }
 
     LaunchedEffect(isInitialDataLoaded) {
-        if (isInitialDataLoaded) {
+        if (isInitialDataLoaded && !hasAutoShownBriefing) {
             showBriefing = true
+            hasAutoShownBriefing = true
         }
     }
 
@@ -162,6 +168,20 @@ fun InvestigationScreen(
     val horizontalPadding = with(density) { maxOf(insets.getLeft(this, LocalLayoutDirection.current), insets.getRight(this, LocalLayoutDirection.current)).toDp() }
     val verticalPadding = with(density) { maxOf(insets.getTop(this), insets.getBottom(this)).toDp() }
 
+    val bannerText = when {
+        isWaitingForReview -> "REVISÃO DO MESTRE"
+        isMaster -> "MESTRE"
+        isMyTurn -> "SUA VEZ"
+        else -> "VEZ DE: ${serverTurnName.uppercase()}"
+    }
+
+    val bannerColor = when {
+        isWaitingForReview -> Color(0xFFF9A825)
+        isMaster -> Color(0xFFB583FF)
+        isMyTurn -> Color(0xFF00B7C3)
+        else -> Color(0xFF7F8C95)
+    }
+
     Box(modifier = Modifier.fillMaxSize().background(Color(0xFF1F2429))) {
         if (isActuallyLoading) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -175,10 +195,9 @@ fun InvestigationScreen(
                     Spacer(modifier = Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(caseDetails!!.title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        val bannerColor = if (isMaster) Color(0xFFB583FF) else if (isMyTurn) Color(0xFF00B7C3) else Color(0xFF7F8C95)
                         Surface(color = bannerColor.copy(0.2f), shape = RoundedCornerShape(4.dp)) {
                             Text(
-                                text = if (isMaster) "MESTRE" else if (isMyTurn) "SUA VEZ" else "VEZ DE: ${gameState?.currentTurnPlayer?.uppercase()}",
+                                text = bannerText,
                                 color = bannerColor,
                                 fontSize = 9.sp,
                                 fontWeight = FontWeight.Black,
@@ -206,7 +225,12 @@ fun InvestigationScreen(
 
                     if (!isMaster) {
                         Spacer(modifier = Modifier.width(8.dp))
-                        Button(onClick = onSubmitSolution, enabled = canInteract, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDE1B1B)), modifier = Modifier.height(38.dp)) {
+                        Button(
+                            onClick = {onSubmitSolution(caseId)},
+                            enabled = canInteract && !isLoading,
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDE1B1B)),
+                            modifier = Modifier.height(38.dp)
+                        ) {
                             Text("SOLUÇÃO", fontSize = 10.sp, fontWeight = FontWeight.Black)
                         }
                     }
@@ -215,7 +239,7 @@ fun InvestigationScreen(
                 Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     PFBadge(points = if (isMaster) 99 else remainingPF)
                     DayCounter(daysLeft = daysLeft)
-                    if (isMyTurn) {
+                    if (isMyTurn && !isWaitingForReview) {
                         Text("PULAR TURNO", color = Color(0xFF00B7C3).copy(0.7f), fontSize = 10.sp, fontWeight = FontWeight.Black, modifier = Modifier.clickable { gameViewModel.skipTurn() })
                     }
                 }
@@ -270,6 +294,7 @@ fun InvestigationScreen(
                         isVisible = isSidebarOpen,
                         clues = clues,
                         currentPlayerName = localName,
+                        connections = caseDetails?.systemTopology?.connections ?: emptyList(),
                         onClose = { isSidebarOpen = false },
                         onSaveNote = { id, text ->
                             if (!isMaster) gameViewModel.saveNote(id, text)

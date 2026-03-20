@@ -23,6 +23,10 @@ class WebSocketService @Inject constructor() {
     private var webSocket: WebSocket? = null
     private var client: OkHttpClient? = null
     private var isConnecting = false
+    private var isIntentionalClose = false
+    private var reconnectAttempts = 0
+    private val maxReconnectAttempts = 5
+    private var reconnectJob: Job? = null
 
     private val _messages = MutableSharedFlow<WebSocketMessage>(extraBufferCapacity = 64)
     val messages: Flow<WebSocketMessage> = _messages.asSharedFlow()
@@ -39,13 +43,26 @@ class WebSocketService @Inject constructor() {
 
     private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
+    fun resetConnection() {
+        isIntentionalClose = true
+        isConnecting = false
+        reconnectJob?.cancel()
+        webSocket?.cancel()
+        cleanup()
+        reconnectAttempts = 0
+        _connectionState.value = ConnectionState.DISCONNECTED
+    }
+
     fun connect() {
         if (connectionState.value is ConnectionState.CONNECTED || isConnecting) {
             return
         }
 
+        isIntentionalClose = false
         isConnecting = true
         _connectionState.value = ConnectionState.CONNECTING
+        reconnectAttempts = 0
+        reconnectJob?.cancel()
 
         coroutineScope.launch {
             try {
@@ -54,6 +71,7 @@ class WebSocketService @Inject constructor() {
 
                 val wsClient = OkHttpClient.Builder()
                     .connectTimeout(10, TimeUnit.SECONDS)
+                    .readTimeout(0, TimeUnit.MILLISECONDS)
                     .pingInterval(30, TimeUnit.SECONDS)
                     .build()
 
@@ -66,21 +84,29 @@ class WebSocketService @Inject constructor() {
                 } ?: run {
                     if (isConnecting) {
                         _connectionState.value = ConnectionState.ERROR("Timeout na conexão")
-                        disconnect()
+                        handleCriticalFailure()
                     }
                 }
             } catch (e: Exception) {
                 _connectionState.value = ConnectionState.ERROR("Falha: ${e.message}")
-                isConnecting = false
+                handleCriticalFailure()
             }
         }
     }
 
     fun disconnect() {
+        isIntentionalClose = true
         isConnecting = false
+        reconnectJob?.cancel()
         webSocket?.cancel()
         cleanup()
         _connectionState.value = ConnectionState.DISCONNECTED
+    }
+
+    private fun handleCriticalFailure() {
+        isConnecting = false
+        cleanup()
+        scheduleReconnect()
     }
 
     private fun cleanup() {
@@ -89,11 +115,33 @@ class WebSocketService @Inject constructor() {
         client = null
     }
 
+    private fun scheduleReconnect() {
+        if (reconnectAttempts >= maxReconnectAttempts) {
+            Log.e("WebSocketService", "Máximo de tentativas de reconexão atingido")
+            _connectionState.value = ConnectionState.DISCONNECTED
+            return
+        }
+
+        reconnectAttempts++
+        val delayMs = (1000L * Math.pow(2.0, (reconnectAttempts - 1).toDouble())).toLong()
+            .coerceAtMost(30000L)
+
+        Log.d("WebSocketService", "Agendando reconexão em $delayMs ms (tentativa $reconnectAttempts)")
+        reconnectJob = coroutineScope.launch {
+            delay(delayMs)
+            if (_connectionState.value !is ConnectionState.CONNECTED && !isConnecting) {
+                connect()
+            }
+        }
+    }
+
     private fun createWebSocketListener(): WebSocketListener {
         return object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 Log.d("WebSocketService", "WebSocket connected")
+                isConnecting = false
                 _connectionState.value = ConnectionState.CONNECTED
+                reconnectAttempts = 0
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
@@ -117,24 +165,23 @@ class WebSocketService @Inject constructor() {
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 Log.d("WebSocketService", "Closed: $code - $reason")
                 _connectionState.value = ConnectionState.DISCONNECTED
-                cleanup()
+                if (!isIntentionalClose) {
+                    handleCriticalFailure()
+                }
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                if (isIntentionalClose) {
+                    Log.d("WebSocketService", "Fechamento intencional. Ignorando falha.")
+                    return
+                }
                 Log.e("WebSocketService", "WebSocket failure", t)
                 _connectionState.value = ConnectionState.ERROR("Connection failed: ${t.message}")
+                handleCriticalFailure()
             }
         }
     }
 
-    private fun scheduleReconnect() {
-        coroutineScope.launch {
-            delay(Constants.WS_RECONNECT_DELAY)
-            if (connectionState.value !is ConnectionState.CONNECTED) {
-                connect()
-            }
-        }
-    }
     fun sendMessage(message: WebSocketMessage): Boolean {
         return try {
             if (connectionState.value !is ConnectionState.CONNECTED) {
@@ -181,7 +228,7 @@ class WebSocketService @Inject constructor() {
                     }
                 }
             }
-        } catch (e: TimeoutCancellationException) {
+        } catch (_: TimeoutCancellationException) {
             Result.Error("Timeout waiting for response")
         } catch (e: Exception) {
             Result.Error("Error: ${e.message}")

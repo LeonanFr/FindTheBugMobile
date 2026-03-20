@@ -55,13 +55,23 @@ class LobbyViewModel @Inject constructor(
     private var observeJob: Job? = null
     private var messagesJob: Job? = null
 
+    private var ignoreSessionUpdates = false
+
     init {
         viewModelScope.launch {
             sessionPreferences.playerName.collect { name ->
-                _uiState.value = _uiState.value.copy(currentPlayerName = name)
+                if (!ignoreSessionUpdates) {
+                    _uiState.value = _uiState.value.copy(currentPlayerName = name)
+                }
             }
         }
         observeLobbyDestroyed()
+    }
+
+    fun resetForNewLobby() {
+        observeJob?.cancel()
+        _uiState.value = UiState()
+        ignoreSessionUpdates = true
     }
 
     private fun observeLobbyDestroyed() {
@@ -91,6 +101,7 @@ class LobbyViewModel @Inject constructor(
     }
 
     fun createLobby(playerName: String) {
+        ignoreSessionUpdates = false
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
                 isLoading = true,
@@ -124,6 +135,7 @@ class LobbyViewModel @Inject constructor(
     }
 
     suspend fun joinLobby(sessionId: String, playerName: String): Result<Session> {
+        ignoreSessionUpdates = false
         _uiState.value = _uiState.value.copy(
             isLoading = true,
             errorMessage = null,

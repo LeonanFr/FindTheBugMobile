@@ -53,6 +53,11 @@ fun LobbyRoomScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
+
+    LaunchedEffect(sessionId) {
+        android.util.Log.d("LobbyRoom", "SessionId: $sessionId")
+    }
+
     LaunchedEffect(uiState.session) {
         android.util.Log.d("LobbyRoom", "Players recebidos: ${uiState.session?.players?.map { it.name }}")
     }

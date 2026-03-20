@@ -58,6 +58,9 @@ class GameViewModel @Inject constructor(
     private val _showSessionEndedDialog = MutableStateFlow(false)
     val showSessionEndedDialog: StateFlow<Boolean> = _showSessionEndedDialog.asStateFlow()
 
+    private val _isWaitingForReview = MutableStateFlow(false)
+    val isWaitingForReview: StateFlow<Boolean> = _isWaitingForReview.asStateFlow()
+
     data class RevealedClueInfo(
         val clueId: String,
         val content: String,
@@ -72,8 +75,8 @@ class GameViewModel @Inject constructor(
     private val _gameStarted = MutableSharedFlow<String>()
     val gameStarted: SharedFlow<String> = _gameStarted.asSharedFlow()
 
-    private val _solutionForReview = MutableSharedFlow<WebSocketMessage.SolutionForReviewResponse>()
-    val solutionForReview: SharedFlow<WebSocketMessage.SolutionForReviewResponse> = _solutionForReview.asSharedFlow()
+    private val _solutionForReview = MutableStateFlow<WebSocketMessage.SolutionForReviewResponse?>(null)
+    val solutionForReview: StateFlow<WebSocketMessage.SolutionForReviewResponse?> = _solutionForReview.asStateFlow()
 
     private val _gameVictory = MutableSharedFlow<Unit>()
     val gameVictory: SharedFlow<Unit> = _gameVictory.asSharedFlow()
@@ -117,17 +120,21 @@ class GameViewModel @Inject constructor(
                     is WebSocketMessage.GameStartedResponse -> {
                         _gameStarted.emit(message.caseId)
                         _navigationEvent.emit(NavigationEvent.GoToInvestigation(message.caseId))
-
                         startObservingGameState(message.sessionId)
                     }
                     is WebSocketMessage.SolutionForReviewResponse -> {
-                        _solutionForReview.emit(message)
+                        _isWaitingForReview.value = true
+                        _solutionForReview.value = message
                     }
                     is WebSocketMessage.SolutionRejectedResponse -> {
+                        _isWaitingForReview.value = false
                         _solutionRejected.emit(message.message)
                     }
                     is WebSocketMessage.LobbyDestroyedResponse -> {
+                        sessionPreferences.clearSession()
+                        gameRepository.disconnectWebSocket()
                         _showSessionEndedDialog.value = true
+                        _navigationEvent.emit(NavigationEvent.GoToHome)
                     }
                     is WebSocketMessage.TurnSkippedResponse ->{
                         _turnSkipped.emit(message)
@@ -136,15 +143,21 @@ class GameViewModel @Inject constructor(
                         _revealedClue.emit(RevealedClueInfo(message.clueId, message.content, message.duration))
                     }
                     is WebSocketMessage.GameVictoryResponse -> {
+                        _isWaitingForReview.value = false
                         _navigationEvent.emit(NavigationEvent.GoToVictory)
                     }
                     is WebSocketMessage.GameOverResponse -> {
+                        _isWaitingForReview.value = false
                         _navigationEvent.emit(NavigationEvent.GoToGameOver)
                     }
                     else -> {}
                 }
             }
         }
+    }
+
+    fun resetWebSocket() {
+        gameRepository.resetWebSocket()
     }
 
     fun skipTurn() {
@@ -160,8 +173,15 @@ class GameViewModel @Inject constructor(
             val sid = currentSessionId
             val name = _currentPlayerName.value
             if (sid != null && name != null) {
-                gameRepository.leaveLobby(sid, name)
+                try {
+                    gameRepository.leaveLobby(sid, name)
+
+                    kotlinx.coroutines.delay(300)
+                } catch (e: Exception) {
+                }
             }
+
+            gameRepository.disconnectWebSocket()
             sessionPreferences.clearSession()
             _navigationEvent.emit(NavigationEvent.GoToHome)
         }
@@ -278,11 +298,15 @@ class GameViewModel @Inject constructor(
         val sessionId = currentSessionId ?: return
 
         viewModelScope.launch {
+            _isWaitingForReview.value = true
             _isLoading.value = true
             _errorMessage.value = null
 
             when (val result = submitSolutionUseCase(sessionId, answers)) {
-                is Result.Error -> _errorMessage.value = result.message
+                is Result.Error -> {
+                    _isWaitingForReview.value = false
+                    _errorMessage.value = result.message
+                }
                 else -> {}
             }
             _isLoading.value = false
@@ -318,6 +342,9 @@ class GameViewModel @Inject constructor(
                 is Result.Error -> _errorMessage.value = result.message
                 else -> {}
             }
+
+            _solutionForReview.value = null
+            _isWaitingForReview.value = false
             _isLoading.value = false
         }
     }
@@ -369,6 +396,8 @@ class GameViewModel @Inject constructor(
         _currentSession.value = null
         _currentGameState.value = null
         _errorMessage.value = null
+        _isWaitingForReview.value = false
+        _solutionForReview.value = null
     }
 
     fun canStartGame(): Boolean {
