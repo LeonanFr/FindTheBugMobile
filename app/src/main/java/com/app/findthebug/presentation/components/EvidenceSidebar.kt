@@ -60,7 +60,8 @@ fun EvidenceSidebar(
                         Text("Nenhuma pista coletada.", color = Color(0xFF3F4B55))
                     }
                 } else {
-                    LazyColumn(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    LazyColumn(modifier = Modifier.padding(12.dp)
+                        .navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         items(clues) { clue ->
                             EvidenceCardInSidebar(
                                 clue = clue,
