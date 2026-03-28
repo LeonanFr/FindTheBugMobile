@@ -165,7 +165,7 @@ class GameViewModel @Inject constructor(
                     val name = _currentPlayerName.value
                     val role = sessionPreferences.role.first()
                     if (sid != null && name != null && role != null) {
-                        val message = if (role == 0) {
+                        val message = if (role == PlayerRole.MASTER.value) {
                             WebSocketMessage.JoinAsMasterRequest(sessionId = sid, masterName = name)
                         } else {
                             WebSocketMessage.JoinAsPlayerRequest(sessionId = sid, playerName = name)
