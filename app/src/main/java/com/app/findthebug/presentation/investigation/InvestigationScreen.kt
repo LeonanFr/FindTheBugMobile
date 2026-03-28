@@ -115,6 +115,9 @@ fun InvestigationScreen(
                 gameViewModel.clearError()
             }
         }
+        gameViewModel.turnSkippedByMaster.collectLatest { previousPlayer ->
+            snackbarHostState.showSnackbar("Mestre pulou o turno de $previousPlayer")
+        }
     }
 
     if (showTurnSkippedDialog) {

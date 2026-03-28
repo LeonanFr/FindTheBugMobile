@@ -90,6 +90,9 @@ class GameViewModel @Inject constructor(
     private val _solutionRejected = MutableSharedFlow<String>()
     val solutionRejected: SharedFlow<String> = _solutionRejected.asSharedFlow()
 
+    private val _turnSkippedByMaster = MutableSharedFlow<String>()
+    val turnSkippedByMaster: SharedFlow<String> = _turnSkippedByMaster.asSharedFlow()
+
     private var currentSessionId: String? = null
 
     private val _navigationEvent = MutableSharedFlow<NavigationEvent>()
@@ -103,6 +106,7 @@ class GameViewModel @Inject constructor(
     }
 
     init {
+
         viewModelScope.launch {
             sessionPreferences.playerName.collect { name ->
                 _currentPlayerName.value = name
@@ -120,6 +124,9 @@ class GameViewModel @Inject constructor(
         viewModelScope.launch {
             gameRepository.observeMessages().collect { message ->
                 when (message) {
+                    is WebSocketMessage.TurnSkippedByMasterResponse -> {
+                        _turnSkippedByMaster.emit(message.previousPlayer)
+                    }
                     is WebSocketMessage.GameStartedResponse -> {
                         _gameStarted.emit(message.caseId)
                         _navigationEvent.emit(NavigationEvent.GoToInvestigation(message.caseId))

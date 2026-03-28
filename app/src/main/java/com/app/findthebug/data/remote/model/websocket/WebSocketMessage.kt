@@ -165,6 +165,11 @@ sealed class WebSocketMessage {
         @SerializedName("reason") val reason: String
     ) : WebSocketMessage()
 
+    data class TurnSkippedByMasterResponse(
+        @SerializedName("type") override val type: String = "TURN_SKIPPED_BY_MASTER",
+        @SerializedName("previousPlayer") val previousPlayer: String
+    ) : WebSocketMessage()
+
     data class ErrorResponse(
         @SerializedName("type") override val type: String,
         @SerializedName("message") val message: String
@@ -192,6 +197,7 @@ sealed class WebSocketMessage {
                 "GAME_OVER" -> context.deserialize(jsonObject, GameOverResponse::class.java)
                 "SOLUTION_REJECTED" -> context.deserialize(jsonObject, SolutionRejectedResponse::class.java)
                 "TURN_SKIPPED" -> context.deserialize(jsonObject, TurnSkippedResponse::class.java)
+                "TURN_SKIPPED_BY_MASTER" -> context.deserialize(jsonObject, TurnSkippedByMasterResponse::class.java)
                 "ERROR" -> context.deserialize(jsonObject, ErrorResponse::class.java)
 
                 "CREATE_LOBBY" -> context.deserialize(jsonObject, CreateLobbyRequest::class.java)
