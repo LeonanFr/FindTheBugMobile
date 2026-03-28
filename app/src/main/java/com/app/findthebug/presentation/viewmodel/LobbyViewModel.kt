@@ -203,6 +203,13 @@ class LobbyViewModel @Inject constructor(
         }
     }
 
+    fun removePlayer(playerName: String) {
+        viewModelScope.launch {
+            val sessionId = _uiState.value.session?.sessionId ?: return@launch
+            gameRepository.leaveLobby(sessionId, playerName)
+        }
+    }
+
     private fun clearLocalSession() {
         viewModelScope.launch {
             observeJob?.cancel()
