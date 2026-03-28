@@ -3,6 +3,7 @@ package com.app.findthebug.presentation.viewmodel
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.app.findthebug.core.common.PlayerRole
 import com.app.findthebug.core.common.Result
 import com.app.findthebug.core.datastore.SessionPreferences
 import com.app.findthebug.data.remote.model.websocket.WebSocketMessage
@@ -118,7 +119,7 @@ class LobbyViewModel @Inject constructor(
                         isLoading = false,
                         hasLoadedOnce = true
                     )
-                    sessionPreferences.saveSession(sessionId, playerName)
+                    sessionPreferences.saveSession(sessionId, playerName, PlayerRole.MASTER.value)
                     startObservingSession(sessionId)
                 }
                 is Result.Error -> {
@@ -154,7 +155,7 @@ class LobbyViewModel @Inject constructor(
                     isLoading = false,
                     hasLoadedOnce = true
                 )
-                sessionPreferences.saveSession(sessionId, playerName)
+                sessionPreferences.saveSession(sessionId, playerName, PlayerRole.PLAYER.value)
             }
             is Result.Error -> {
                 _uiState.value = _uiState.value.copy(

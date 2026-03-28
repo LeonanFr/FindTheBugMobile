@@ -13,6 +13,12 @@ sealed class WebSocketMessage {
         @SerializedName("playerName") val playerName: String
     ) : WebSocketMessage()
 
+    data class JoinAsMasterRequest(
+        @SerializedName("type") override val type: String = "JOIN_AS_MASTER",
+        @SerializedName("sessionId") val sessionId: String,
+        @SerializedName("masterName") val masterName: String
+    ) : WebSocketMessage()
+
     data class JoinAsPlayerRequest(
         @SerializedName("type") override val type: String = "JOIN_AS_PLAYER",
         @SerializedName("sessionId") val sessionId: String,
@@ -185,6 +191,7 @@ sealed class WebSocketMessage {
 
                 "CREATE_LOBBY" -> context.deserialize(jsonObject, CreateLobbyRequest::class.java)
                 "JOIN_AS_PLAYER" -> context.deserialize(jsonObject, JoinAsPlayerRequest::class.java)
+                "JOIN_AS_MASTER" -> context.deserialize(jsonObject, JoinAsMasterRequest::class.java)
                 "GET_LOBBY_INFO" -> context.deserialize(jsonObject, GetLobbyInfoRequest::class.java)
                 "START_GAME" -> context.deserialize(jsonObject, StartGameRequest::class.java)
                 "GAME_ACTION" -> context.deserialize(jsonObject, GameActionRequest::class.java)

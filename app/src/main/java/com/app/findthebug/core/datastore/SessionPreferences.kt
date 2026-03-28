@@ -2,6 +2,7 @@ package com.app.findthebug.core.datastore
 
 import android.content.Context
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -21,6 +22,7 @@ class SessionPreferences @Inject constructor(
     companion object {
         val SESSION_ID = stringPreferencesKey("session_id")
         val PLAYER_NAME = stringPreferencesKey("player_name")
+        val ROLE = intPreferencesKey("role")   // 0 = Master, 1 = Player
         val SESSION_ACTIVE = stringPreferencesKey("session_active")
     }
 
@@ -30,13 +32,17 @@ class SessionPreferences @Inject constructor(
     val playerName: Flow<String?> = dataStore.data
         .map { preferences -> preferences[PLAYER_NAME] }
 
+    val role: Flow<Int?> = dataStore.data
+        .map { preferences -> preferences[ROLE] }
+
     val isSessionActive: Flow<Boolean> = dataStore.data
         .map { preferences -> preferences[SESSION_ACTIVE] == "true" }
 
-    suspend fun saveSession(sessionId: String, playerName: String) {
+    suspend fun saveSession(sessionId: String, playerName: String, role: Int) {
         dataStore.edit { preferences ->
             preferences[SESSION_ID] = sessionId
             preferences[PLAYER_NAME] = playerName
+            preferences[ROLE] = role
             preferences[SESSION_ACTIVE] = "true"
         }
     }
@@ -45,6 +51,7 @@ class SessionPreferences @Inject constructor(
         dataStore.edit { preferences ->
             preferences.remove(SESSION_ID)
             preferences.remove(PLAYER_NAME)
+            preferences.remove(ROLE)
             preferences[SESSION_ACTIVE] = "false"
         }
     }

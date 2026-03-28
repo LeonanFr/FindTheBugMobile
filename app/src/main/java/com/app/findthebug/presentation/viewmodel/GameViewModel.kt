@@ -6,6 +6,7 @@ import com.app.findthebug.core.common.PlayerRole
 import com.app.findthebug.core.common.Result
 import com.app.findthebug.core.common.ActionType
 import com.app.findthebug.core.datastore.SessionPreferences
+import com.app.findthebug.data.remote.api.WebSocketService
 import com.app.findthebug.data.remote.model.websocket.WebSocketMessage
 import com.app.findthebug.domain.model.GameState
 import com.app.findthebug.domain.model.Session
@@ -20,6 +21,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -37,6 +39,7 @@ class GameViewModel @Inject constructor(
     private val saveSessionUseCase: SaveSessionUseCase,
     private val loadSessionUseCase: LoadSessionUseCase,
     private val sessionPreferences: SessionPreferences,
+    private val webSocketService: WebSocketService,
     private val gameRepository: IGameRepository
 ) : ViewModel() {
 
@@ -154,6 +157,25 @@ class GameViewModel @Inject constructor(
                 }
             }
         }
+
+        viewModelScope.launch {
+            webSocketService.connectionState.collect { state ->
+                if (state == WebSocketService.ConnectionState.CONNECTED) {
+                    val sid = currentSessionId
+                    val name = _currentPlayerName.value
+                    val role = sessionPreferences.role.first()
+                    if (sid != null && name != null && role != null) {
+                        val message = if (role == 0) {
+                            WebSocketMessage.JoinAsMasterRequest(sessionId = sid, masterName = name)
+                        } else {
+                            WebSocketMessage.JoinAsPlayerRequest(sessionId = sid, playerName = name)
+                        }
+                        webSocketService.sendMessage(message)
+                    }
+                }
+            }
+        }
+
     }
 
     fun resetWebSocket() {
@@ -209,7 +231,7 @@ class GameViewModel @Inject constructor(
                     _currentSession.value = result.data
                     currentSessionId = result.data.sessionId
                     setCurrentPlayerName(playerName)
-                    sessionPreferences.saveSession(result.data.sessionId, playerName)
+                    sessionPreferences.saveSession(result.data.sessionId, playerName, role = PlayerRole.MASTER.value)
                     startObservingGameState(result.data.sessionId)
                 }
                 is Result.Error -> _errorMessage.value = result.message
@@ -229,7 +251,7 @@ class GameViewModel @Inject constructor(
                     _currentSession.value = result.data
                     currentSessionId = sessionId
                     setCurrentPlayerName(playerName)
-                    sessionPreferences.saveSession(sessionId, playerName)
+                    sessionPreferences.saveSession(sessionId, playerName, PlayerRole.PLAYER.value)
                     startObservingGameState(sessionId)
                 }
                 is Result.Error -> _errorMessage.value = result.message
@@ -267,9 +289,6 @@ class GameViewModel @Inject constructor(
             _errorMessage.value = null
 
             when (val result = startGameUseCase(sessionId, playerName, caseId)) {
-                is Result.Success -> {
-                    sessionPreferences.saveSession(sessionId, playerName)
-                }
                 is Result.Error -> _errorMessage.value = result.message
                 else -> {}
             }
