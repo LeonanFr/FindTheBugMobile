@@ -23,6 +23,7 @@ import kotlinx.coroutines.delay
 fun ClueRevealedDialog(
     clueContent: String,
     duration: Int,
+    canSave: Boolean,
     onSaveAndExit: (String) -> Unit
 ) {
     var noteText by remember { mutableStateOf("") }
@@ -34,7 +35,11 @@ fun ClueRevealedDialog(
             delay(1000)
             timeLeft--
         }
-        onSaveAndExit(noteText)
+        if (canSave) {
+            onSaveAndExit(noteText)
+        } else {
+            onSaveAndExit("")
+        }
     }
 
     Dialog(
@@ -49,7 +54,6 @@ fun ClueRevealedDialog(
             color = Color(0xFF0A0D0F)
         ) {
             Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
-
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
@@ -65,29 +69,52 @@ fun ClueRevealedDialog(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("${timeLeft}s ", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                         CircularProgressIndicator(
-                            progress = { timeLeft / duration.toFloat() }, // usa duration
+                            progress = { timeLeft / duration.toFloat() },
                             modifier = Modifier.size(18.dp),
                             color = if (timeLeft < 10) Color(0xFFFF6B6B) else Color(0xFF00B7C3),
                             strokeWidth = 2.dp
                         )
                     }
                 }
-                SecondaryTabRow(
-                    selectedTabIndex = currentPage,
-                    containerColor = Color.Transparent,
-                    contentColor = Color(0xFF00B7C3),
-                    divider = {}
-                ) {
-                    Tab(selected = currentPage == 0, onClick = { currentPage = 0 }) {
-                        Text("LEITURA DE CÓDIGO", modifier = Modifier.padding(12.dp), fontWeight = FontWeight.Bold)
+
+                if (canSave) {
+                    SecondaryTabRow(
+                        selectedTabIndex = currentPage,
+                        containerColor = Color.Transparent,
+                        contentColor = Color(0xFF00B7C3),
+                        divider = {}
+                    ) {
+                        Tab(selected = currentPage == 0, onClick = { currentPage = 0 }) {
+                            Text("LEITURA DE CÓDIGO", modifier = Modifier.padding(12.dp), fontWeight = FontWeight.Bold)
+                        }
+                        Tab(selected = currentPage == 1, onClick = { currentPage = 1 }) {
+                            Text("NOTAS TÉCNICAS", modifier = Modifier.padding(12.dp), fontWeight = FontWeight.Bold)
+                        }
                     }
-                    Tab(selected = currentPage == 1, onClick = { currentPage = 1 }) {
-                        Text("NOTAS TÉCNICAS", modifier = Modifier.padding(12.dp), fontWeight = FontWeight.Bold)
-                    }
+                } else {
+                    Text(
+                        "LEITURA DE CÓDIGO",
+                        color = Color(0xFF00B7C3),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
                 }
 
                 Box(modifier = Modifier.weight(1f).fillMaxWidth().padding(vertical = 12.dp)) {
-                    if (currentPage == 0) {
+                    if (canSave && currentPage == 1) {
+                        OutlinedTextField(
+                            value = noteText,
+                            onValueChange = { noteText = it },
+                            modifier = Modifier.fillMaxSize(),
+                            placeholder = { Text("Documente a falha aqui...", color = Color(0xFF3F4B55)) },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Color(0xFF00B7C3),
+                                unfocusedBorderColor = Color(0xFF1F2429),
+                                focusedTextColor = Color.White
+                            )
+                        )
+                    } else {
                         Surface(
                             modifier = Modifier.fillMaxSize(),
                             color = Color(0xFF050708),
@@ -103,28 +130,22 @@ fun ClueRevealedDialog(
                                 modifier = Modifier.verticalScroll(rememberScrollState()).padding(16.dp)
                             )
                         }
-                    } else {
-                        OutlinedTextField(
-                            value = noteText,
-                            onValueChange = { noteText = it },
-                            modifier = Modifier.fillMaxSize(),
-                            placeholder = { Text("Documente a falha aqui...", color = Color(0xFF3F4B55)) },
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = Color(0xFF00B7C3),
-                                unfocusedBorderColor = Color(0xFF1F2429),
-                                focusedTextColor = Color.White
-                            )
-                        )
                     }
                 }
 
                 Button(
-                    onClick = { onSaveAndExit(noteText) },
+                    onClick = {
+                        if (canSave) {
+                            onSaveAndExit(noteText)
+                        } else {
+                            onSaveAndExit("")
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth().height(56.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00B7C3)),
                     shape = RoundedCornerShape(4.dp)
                 ) {
-                    Text("SALVAR E SINCRONIZAR", fontWeight = FontWeight.Black)
+                    Text(if (canSave) "SALVAR E SINCRONIZAR" else "CONTINUAR", fontWeight = FontWeight.Black)
                 }
             }
         }

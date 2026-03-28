@@ -22,6 +22,7 @@ navigationevent = "1.0.2"
 foundationLayout = "1.10.5"
 foundation = "1.10.5"
 runtimeSaveable = "1.10.5"
+runtimeSaveableVersion = "1.10.6"
 
 
 [libraries]
@@ -54,6 +55,7 @@ androidx-navigationevent = { group = "androidx.navigationevent", name = "navigat
 androidx-compose-foundation-layout = { group = "androidx.compose.foundation", name = "foundation-layout", version.ref = "foundationLayout" }
 androidx-compose-foundation = { group = "androidx.compose.foundation", name = "foundation", version.ref = "foundation" }
 androidx-compose-runtime-saveable = { group = "androidx.compose.runtime", name = "runtime-saveable", version.ref = "runtimeSaveable" }
+androidx-runtime-saveable = { group = "androidx.compose.runtime", name = "runtime-saveable", version.ref = "runtimeSaveableVersion" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

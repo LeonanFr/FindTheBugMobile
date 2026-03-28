@@ -146,13 +146,12 @@ fun InvestigationScreen(
 
     LaunchedEffect(Unit) {
         gameViewModel.revealedClue.collectLatest { clue ->
-            if (!isMaster) {
-                activeClueId = clue.clueId
-                activeClueContent = clue.content
-                clueDuration = clue.duration
-                showClueDialog = true
-            }
+            activeClueId = clue.clueId
+            activeClueContent = clue.content
+            clueDuration = clue.duration
+            showClueDialog = true
         }
+
         gameViewModel.navigationEvent.collect { event ->
             if (event is GameViewModel.NavigationEvent.GoToHome) onNavigateHome()
         }
@@ -236,11 +235,28 @@ fun InvestigationScreen(
                     }
                 }
 
-                Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    PFBadge(points = if (isMaster) 99 else remainingPF)
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    PFBadge(points = remainingPF)
                     DayCounter(daysLeft = daysLeft)
-                    if (isMyTurn && !isWaitingForReview) {
-                        Text("PULAR TURNO", color = Color(0xFF00B7C3).copy(0.7f), fontSize = 10.sp, fontWeight = FontWeight.Black, modifier = Modifier.clickable { gameViewModel.skipTurn() })
+                    if (isMaster && !isWaitingForReview) {
+                        Text(
+                            "PULAR TURNO",
+                            color = Color(0xFF00B7C3).copy(0.7f),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Black,
+                            modifier = Modifier.clickable { gameViewModel.masterSkipTurn() }
+                        )
+                    } else if (isMyTurn && !isWaitingForReview) {
+                        Text(
+                            "PULAR TURNO",
+                            color = Color(0xFF00B7C3).copy(0.7f),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Black,
+                            modifier = Modifier.clickable { gameViewModel.skipTurn() }
+                        )
                     }
                 }
 
@@ -295,6 +311,7 @@ fun InvestigationScreen(
                         clues = clues,
                         currentPlayerName = localName,
                         connections = caseDetails?.systemTopology?.connections ?: emptyList(),
+                        isMaster = isMaster,
                         onClose = { isSidebarOpen = false },
                         onSaveNote = { id, text ->
                             if (!isMaster) gameViewModel.saveNote(id, text)
@@ -308,6 +325,7 @@ fun InvestigationScreen(
             ClueRevealedDialog(
                 clueContent = activeClueContent,
                 duration = clueDuration,
+                canSave = !isMaster,
                 onSaveAndExit = { note ->
                     if (!isMaster) gameViewModel.saveNote(activeClueId, note)
                     showClueDialog = false

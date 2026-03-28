@@ -332,12 +332,18 @@ class GameViewModel @Inject constructor(
         }
     }
 
+    fun masterSkipTurn() {
+        val sid = currentSessionId ?: return
+        val message = WebSocketMessage.MasterSkipTurnRequest(sessionId = sid)
+        webSocketService.sendMessage(message)
+    }
+
     fun saveNote(clueId: String, content: String) {
         val sessionId = currentSessionId ?: return
         val playerId = _currentPlayerName.value ?: return
 
         val finalContent = content.ifBlank {
-            "[RELATÓRIO DE CAMPO: O investigador não registrou observações técnicas sobre este rastro de código]"
+            "[Nenhum observação anotada]"
         }
 
         viewModelScope.launch {

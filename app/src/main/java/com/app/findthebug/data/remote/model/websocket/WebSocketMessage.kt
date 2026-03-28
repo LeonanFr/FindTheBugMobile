@@ -71,6 +71,11 @@ sealed class WebSocketMessage {
         @SerializedName("playerName") val playerName: String
     ) : WebSocketMessage()
 
+    data class MasterSkipTurnRequest(
+        @SerializedName("type") override val type: String = "MASTER_SKIP_TURN",
+        @SerializedName("sessionId") val sessionId: String
+    ) : WebSocketMessage()
+
     // === RESPONSES ===
     data class LobbyCreatedResponse(
         @SerializedName("type") override val type: String,
@@ -199,6 +204,7 @@ sealed class WebSocketMessage {
                 "SAVE_NOTE" -> context.deserialize(jsonObject, SaveNoteRequest::class.java)
                 "VALIDATE_SOLUTION" -> context.deserialize(jsonObject, ValidateSolutionRequest::class.java)
                 "LEAVE_LOBBY" -> context.deserialize(jsonObject, LeaveLobbyRequest::class.java)
+                "MASTER_SKIP_TURN" -> context.deserialize(jsonObject, MasterSkipTurnRequest::class.java)
 
                 else -> throw JsonParseException("Unknown WebSocket message type: $type")
             }
